@@ -4,13 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Play,
-  Pause,
-  Square,
   Users,
   MapPin,
   Clock,
   CheckCircle,
-  AlertCircle,
   QrCode,
   Settings,
   UserPlus,
@@ -19,7 +16,6 @@ import {
   Club,
   Athlete,
   Coach,
-  TestStation,
   AdvancedTestSession,
 } from "@/types";
 import { TEST_STATIONS } from "@/lib/testStations";
@@ -572,12 +568,29 @@ export default function TestSessionPage() {
             setSelectedClubForImport(null);
           }}
           onSuccess={(importedAthletes) => {
-            setAthletes((prev) => [...prev, ...importedAthletes]);
+            // Convert ImportedAthlete to Athlete format
+            const convertedAthletes: Athlete[] = importedAthletes.map((athlete, index) => ({
+              id: `imported-${Date.now()}-${index}`,
+              uuid: `IMP${String(index + 1).padStart(3, '0')}`,
+              first_name: athlete.first_name,
+              last_name: athlete.last_name,
+              birth_date: athlete.birth_date,
+              height: athlete.height || 0,
+              weight: athlete.weight || 0,
+              bmi: athlete.height && athlete.weight 
+                ? athlete.weight / Math.pow(athlete.height / 100, 2) 
+                : 0,
+              club_id: selectedClubForImport?.id || '',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }));
+            
+            setAthletes((prev) => [...prev, ...convertedAthletes]);
             setShowImportModal(false);
             setSelectedClubForImport(null);
             // Refresh selected athletes
             if (selectedClub) {
-              const clubAthletes = [...athletes, ...importedAthletes].filter(
+              const clubAthletes = [...athletes, ...convertedAthletes].filter(
                 (athlete) => athlete.club_id === selectedClub.id
               );
               setSelectedAthletes(clubAthletes);

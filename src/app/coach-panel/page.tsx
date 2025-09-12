@@ -5,7 +5,6 @@ import {
   User,
   Clock,
   CheckCircle,
-  AlertCircle,
   Save,
   ArrowLeft,
   QrCode,

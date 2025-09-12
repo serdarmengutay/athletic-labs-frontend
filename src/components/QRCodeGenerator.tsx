@@ -21,17 +21,16 @@ export default function QRCodeGenerator({
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [copied, setCopied] = useState(false);
 
-  const qrData = {
-    athleteId,
-    athleteName,
-    sessionId,
-    timestamp: new Date().toISOString(),
-    type: "athletic_test",
-  };
-
   useEffect(() => {
     const generateQR = async () => {
       try {
+        const qrData = {
+          athleteId,
+          athleteName,
+          sessionId,
+          timestamp: new Date().toISOString(),
+          type: "athletic_test",
+        };
         const qrString = JSON.stringify(qrData);
         const dataUrl = await QRCode.toDataURL(qrString, {
           width: size,

@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { QrScanner } from "@yudiel/react-qr-scanner";
-import { X, Camera, AlertCircle, CheckCircle } from "lucide-react";
+import { useState } from "react";
+import { X, Camera, AlertCircle } from "lucide-react";
 
 interface QRScannerProps {
   onScan: (data: string) => void;
@@ -10,21 +9,25 @@ interface QRScannerProps {
   isOpen: boolean;
 }
 
-export default function QRScanner({ onScan, onClose, isOpen }: QRScannerProps) {
+export default function QRScanner({
+  onClose,
+  isOpen,
+}: Omit<QRScannerProps, "onScan">) {
   const [error, setError] = useState<string>("");
   const [isScanning, setIsScanning] = useState(false);
 
-  const handleScan = (result: string) => {
-    if (result) {
-      setIsScanning(false);
-      onScan(result);
-    }
-  };
+  // QR Scanner functionality will be implemented later
+  // const handleScan = (result: string) => {
+  //   if (result) {
+  //     setIsScanning(false);
+  //     onScan(result);
+  //   }
+  // };
 
-  const handleError = (error: Error) => {
-    setError(error.message);
-    setIsScanning(false);
-  };
+  // const handleError = (error: Error) => {
+  //   setError(error.message);
+  //   setIsScanning(false);
+  // };
 
   const startScanning = () => {
     setError("");
@@ -68,22 +71,15 @@ export default function QRScanner({ onScan, onClose, isOpen }: QRScannerProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="relative">
-                <QrScanner
-                  onDecode={handleScan}
-                  onError={handleError}
-                  containerStyle={{
-                    width: "100%",
-                    height: "300px",
-                    borderRadius: "8px",
-                    overflow: "hidden",
-                  }}
-                />
-                <div className="absolute inset-0 border-2 border-blue-500 rounded-lg pointer-events-none">
-                  <div className="absolute top-2 left-2 w-6 h-6 border-t-2 border-l-2 border-blue-500 rounded-tl-lg"></div>
-                  <div className="absolute top-2 right-2 w-6 h-6 border-t-2 border-r-2 border-blue-500 rounded-tr-lg"></div>
-                  <div className="absolute bottom-2 left-2 w-6 h-6 border-b-2 border-l-2 border-blue-500 rounded-bl-lg"></div>
-                  <div className="absolute bottom-2 right-2 w-6 h-6 border-b-2 border-r-2 border-blue-500 rounded-br-lg"></div>
+              <div className="relative bg-gray-100 rounded-lg h-64 flex items-center justify-center">
+                <div className="text-center">
+                  <Camera className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">
+                    QR Scanner bileşeni yükleniyor...
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Bu özellik şu anda geliştirilme aşamasında
+                  </p>
                 </div>
               </div>
 

@@ -5,8 +5,6 @@ import {
   QrCode,
   CheckCircle,
   ArrowRight,
-  User,
-  Clock,
   Save,
   AlertCircle,
   LogOut,
@@ -23,11 +21,20 @@ export default function StationPage() {
   );
   const [currentAthlete, setCurrentAthlete] = useState<Athlete | null>(null);
   const [testValue, setTestValue] = useState<string>("");
-  const [isScanning, setIsScanning] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
-  const [recentTests, setRecentTests] = useState<any[]>([]);
+  const [recentTests, setRecentTests] = useState<Array<{
+    id: string;
+    athlete: Athlete;
+    station: TestStation;
+    value: number;
+    timestamp: string;
+  }>>([]);
   const [stationQueue, setStationQueue] = useState<Athlete[]>([]);
-  const [currentSession, setCurrentSession] = useState<any>(null);
+  const [currentSession, setCurrentSession] = useState<{
+    id: string;
+    name: string;
+    status: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 

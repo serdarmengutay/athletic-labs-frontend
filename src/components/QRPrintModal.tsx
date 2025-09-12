@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Printer, Download, QrCode, Users } from "lucide-react";
+import { X, Printer, Download, Users } from "lucide-react";
 import QRCode from "qrcode";
 import { Athlete, AdvancedTestSession } from "@/types";
 
@@ -20,10 +20,6 @@ export default function QRPrintModal({
     { athlete: Athlete; qrDataUrl: string }[]
   >([]);
   const [isGenerating, setIsGenerating] = useState(false);
-
-  useEffect(() => {
-    generateQRCodes();
-  }, [athletes, session]);
 
   const generateQRCodes = async () => {
     setIsGenerating(true);
@@ -61,6 +57,10 @@ export default function QRPrintModal({
     setQrCodes(qrDataArray);
     setIsGenerating(false);
   };
+
+  useEffect(() => {
+    generateQRCodes();
+  }, [athletes, session]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const printQRCodes = () => {
     const printWindow = window.open("", "_blank");
@@ -129,9 +129,9 @@ export default function QRPrintModal({
     printWindow.print();
   };
 
-  const downloadQRCodes = () => {
-    const zip = require("jszip");
-    const zipFile = new zip();
+  const downloadQRCodes = async () => {
+    const { default: JSZip } = await import("jszip");
+    const zipFile = new JSZip();
 
     qrCodes.forEach(({ athlete, qrDataUrl }) => {
       const base64Data = qrDataUrl.split(",")[1];

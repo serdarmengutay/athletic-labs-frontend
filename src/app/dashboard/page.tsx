@@ -7,18 +7,12 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
-  Play,
-  Pause,
-  Square,
   RefreshCw,
   BarChart3,
-  TrendingUp,
 } from "lucide-react";
 import {
   AdvancedTestSession,
   TestSessionStatus,
-  Athlete,
-  Coach,
 } from "@/types";
 import { TEST_STATIONS } from "@/lib/testStations";
 

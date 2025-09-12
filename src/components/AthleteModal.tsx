@@ -71,26 +71,27 @@ export default function AthleteModal({
       const response = await athleteApi.create(athleteData);
       console.log("Başarılı yanıt:", response);
       onSuccess();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Sporcu oluşturulurken hata:", error);
 
       // Daha detaylı hata mesajı
       let errorMessage = "Sporcu oluşturulurken hata oluştu";
 
-      if (error.response) {
+      if (error && typeof error === 'object' && 'response' in error) {
         // Backend'den gelen hata
-        console.error("Backend hata yanıtı:", error.response.data);
-        console.error("HTTP durum kodu:", error.response.status);
-        errorMessage = `Backend hatası (${error.response.status}): ${
-          error.response.data?.message ||
-          error.response.data ||
+        const axiosError = error as { response?: { data?: { message?: string }; status?: number } };
+        console.error("Backend hata yanıtı:", axiosError.response.data);
+        console.error("HTTP durum kodu:", axiosError.response.status);
+        errorMessage = `Backend hatası (${axiosError.response.status}): ${
+          axiosError.response.data?.message ||
+          axiosError.response.data ||
           "Bilinmeyen hata"
         }`;
-      } else if (error.request) {
+      } else if (error && typeof error === 'object' && 'request' in error) {
         // İstek gönderildi ama yanıt alınamadı
-        console.error("İstek gönderildi ama yanıt alınamadı:", error.request);
+        console.error("İstek gönderildi ama yanıt alınamadı:", (error as { request?: unknown }).request);
         errorMessage = "Backend'e bağlanılamıyor. Backend çalışıyor mu?";
-      } else {
+      } else if (error instanceof Error) {
         // İstek hazırlanırken hata
         console.error("İstek hazırlanırken hata:", error.message);
         errorMessage = `İstek hatası: ${error.message}`;

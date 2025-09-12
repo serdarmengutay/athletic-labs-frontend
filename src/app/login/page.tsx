@@ -38,11 +38,11 @@ export default function LoginPage() {
       const stationId =
         response.data.data.coach.assigned_stations[0] || "ffmi-station";
       router.push(`/station?station=${stationId}`);
-    } catch (err: any) {
-      setError(
-        err.response?.data?.message ||
-          "Giriş yapılamadı. Lütfen bilgilerinizi kontrol edin."
-      );
+    } catch (err: unknown) {
+      const errorMessage = err && typeof err === 'object' && 'response' in err 
+        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message 
+        : "Giriş yapılamadı. Lütfen bilgilerinizi kontrol edin.";
+      setError(errorMessage || "Giriş yapılamadı. Lütfen bilgilerinizi kontrol edin.");
     } finally {
       setLoading(false);
     }

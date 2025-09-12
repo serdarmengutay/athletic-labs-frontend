@@ -13,7 +13,7 @@ import { Club } from "@/types";
 
 interface AthleteImportModalProps {
   onClose: () => void;
-  onSuccess: (athletes: any[]) => void;
+  onSuccess: (athletes: ImportedAthlete[]) => void;
   club: Club;
 }
 
@@ -146,7 +146,7 @@ export default function AthleteImportModal({
       }));
 
       onSuccess(athletesWithClub);
-    } catch (err) {
+    } catch {
       setError("Sporcular kaydedilirken hata oluştu");
     } finally {
       setIsProcessing(false);

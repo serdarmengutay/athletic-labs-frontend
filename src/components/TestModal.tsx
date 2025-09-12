@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import { testApi } from "@/lib/api";
 import { Club, Athlete } from "@/types";
@@ -35,7 +35,7 @@ export default function TestModal({
     ffmi: "",
   });
 
-  const selectedClub = clubs.find((c: any) => c.id === selectedClubId);
+  const selectedClub = clubs.find((c: Club) => c.id === selectedClubId);
   const filteredAthletes = selectedClub
     ? athletes.filter((athlete) => athlete.club_id === selectedClub.id)
     : [];
