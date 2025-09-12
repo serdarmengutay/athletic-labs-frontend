@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Athletic Labs Frontend
 
-## Getting Started
+Modern sporcu performans takip sistemi - QR kod tabanlı test yönetimi ve real-time takip.
 
-First, run the development server:
+## 🏃‍♂️ Özellikler
+
+### Test Yönetimi
+- **Kulüp ve Sporcu Yönetimi** - Excel/CSV ile toplu sporcu import
+- **QR Kod Sistemi** - Gerçek kamera ile QR kod tarama
+- **Test İstasyonları** - 5 farklı test istasyonu (FFMI, Sprint, Çeviklik, vb.)
+- **Hoca Paneli** - İstasyon bazlı değer girişi
+- **Real-time Dashboard** - Canlı test takibi
+
+### Teknik Özellikler
+- **Next.js 15** - Modern React framework
+- **TypeScript** - Tip güvenliği
+- **Tailwind CSS** - Responsive tasarım
+- **QR Code Scanner** - Gerçek kamera entegrasyonu
+- **JWT Authentication** - Güvenli hoca girişi
+- **Mobile-First** - Tablet ve telefon uyumlu
+
+## 🚀 Kurulum
 
 ```bash
+# Repository'yi klonlayın
+git clone https://github.com/serdarmengutay/athletic-labs-frontend.git
+
+# Dependencies'leri yükleyin
+npm install
+
+# Development server'ı başlatın
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 📱 Kullanım
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 1. Test Öncesi Hazırlık
+- Kulüp seçin
+- Sporcu listesini Excel/CSV ile import edin
+- QR kodları oluşturun ve yazdırın
+- Hocaları istasyonlara atayın
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 2. Saha Uygulaması
+- Hocalar `/login` ile giriş yapar
+- İstasyon sayfasında QR kodları tarar
+- Test değerlerini girer
+- Otomatik sıra takibi
 
-## Learn More
+### 3. Dashboard
+- Real-time test durumu
+- Sporcu ilerlemesi
+- İstasyon istatistikleri
 
-To learn more about Next.js, take a look at the following resources:
+## 🔧 API Endpoints
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Authentication
+- `POST /auth/coach/login` - Hoca girişi
+- `GET /auth/coach/profile` - Hoca profili
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### QR Management
+- `POST /qr/validate` - QR kod doğrulama
+- `POST /qr/bulk-generate` - Toplu QR oluşturma
 
-## Deploy on Vercel
+### Station Management
+- `POST /station/test` - Test değeri gönderme
+- `GET /station/queue` - İstasyon sırası
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🎯 Test İstasyonları
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. **FFMI & Boy-Kilo** - Vücut kompozisyonu
+2. **30m Fotosel** - Sprint testi (2 koşu)
+3. **Çeviklik Drilli** - Koordinasyon testi
+4. **Dikey Sıçrama** - Güç testi
+5. **Esneklik Boxı** - Hareketlilik testi
+
+## 📊 Demo Hesaplar
+
+- **FFMI İstasyonu:** ffmi@demo.com / demo123
+- **Sprint İstasyonu:** sprint@demo.com / demo123
+- **Yönetici:** admin@demo.com / admin123
+
+## 🛠️ Teknoloji Stack
+
+- **Frontend:** Next.js 15, React 19, TypeScript
+- **Styling:** Tailwind CSS
+- **QR Scanner:** @yudiel/react-qr-scanner
+- **HTTP Client:** Axios
+- **Icons:** Lucide React
+
+## 📱 Mobil Uyumluluk
+
+- Responsive tasarım
+- Touch-friendly arayüz
+- Kamera entegrasyonu
+- Offline çalışma desteği
+
+## 🔗 Backend
+
+Backend API için: [athletic-labs-backend](https://github.com/serdarmengutay/athletic-labs-backend)
+
+## 📄 Lisans
+
+MIT License
