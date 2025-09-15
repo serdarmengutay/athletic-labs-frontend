@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, Printer, Download, Users } from "lucide-react";
 import QRCode from "qrcode";
+import Image from "next/image";
 import { Athlete, AdvancedTestSession } from "@/types";
 
 interface QRPrintModalProps {
@@ -215,9 +216,11 @@ export default function QRPrintModal({
                       {athlete.uuid}
                     </div>
                     <div className="flex justify-center">
-                      <img
+                      <Image
                         src={qrDataUrl}
                         alt="QR Code"
+                        width={80}
+                        height={80}
                         className="w-20 h-20"
                       />
                     </div>

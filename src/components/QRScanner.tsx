@@ -9,25 +9,21 @@ interface QRScannerProps {
   isOpen: boolean;
 }
 
-export default function QRScanner({
-  onClose,
-  isOpen,
-}: Omit<QRScannerProps, "onScan">) {
+export default function QRScanner({ onScan, onClose, isOpen }: QRScannerProps) {
   const [error, setError] = useState<string>("");
   const [isScanning, setIsScanning] = useState(false);
 
-  // QR Scanner functionality will be implemented later
-  // const handleScan = (result: string) => {
-  //   if (result) {
-  //     setIsScanning(false);
-  //     onScan(result);
-  //   }
-  // };
+  const handleScan = (result: string) => {
+    if (result) {
+      setIsScanning(false);
+      onScan(result);
+    }
+  };
 
-  // const handleError = (error: Error) => {
-  //   setError(error.message);
-  //   setIsScanning(false);
-  // };
+  const handleError = (error: Error) => {
+    setError(error.message);
+    setIsScanning(false);
+  };
 
   const startScanning = () => {
     setError("");
@@ -72,14 +68,44 @@ export default function QRScanner({
           ) : (
             <div className="space-y-4">
               <div className="relative bg-gray-100 rounded-lg h-64 flex items-center justify-center">
-                <div className="text-center">
+                <div className="text-center w-full p-4">
                   <Camera className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">
-                    QR Scanner bileşeni yükleniyor...
+                  <p className="text-gray-600 mb-4">QR Kod Tarayıcı</p>
+                  <p className="text-sm text-gray-500 mb-4">
+                    QR kod verisini manuel olarak girin veya kamera ile tarayın
                   </p>
-                  <p className="text-sm text-gray-500 mt-2">
-                    Bu özellik şu anda geliştirilme aşamasında
-                  </p>
+
+                  {/* Manual QR Data Input */}
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="QR kod verisini buraya yapıştırın..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter") {
+                          const value = (
+                            e.target as HTMLInputElement
+                          ).value.trim();
+                          if (value) {
+                            handleScan(value);
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const input = document.querySelector(
+                          'input[type="text"]'
+                        ) as HTMLInputElement;
+                        if (input && input.value.trim()) {
+                          handleScan(input.value.trim());
+                        }
+                      }}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                    >
+                      QR Verisini İşle
+                    </button>
+                  </div>
                 </div>
               </div>
 

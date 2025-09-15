@@ -77,9 +77,11 @@ export default function AthleteModal({
       // Daha detaylı hata mesajı
       let errorMessage = "Sporcu oluşturulurken hata oluştu";
 
-      if (error && typeof error === 'object' && 'response' in error) {
+      if (error && typeof error === "object" && "response" in error) {
         // Backend'den gelen hata
-        const axiosError = error as { response?: { data?: { message?: string }; status?: number } };
+        const axiosError: any = error as {
+          response?: { data?: { message?: string }; status?: number };
+        };
         console.error("Backend hata yanıtı:", axiosError.response.data);
         console.error("HTTP durum kodu:", axiosError.response.status);
         errorMessage = `Backend hatası (${axiosError.response.status}): ${
@@ -87,9 +89,12 @@ export default function AthleteModal({
           axiosError.response.data ||
           "Bilinmeyen hata"
         }`;
-      } else if (error && typeof error === 'object' && 'request' in error) {
+      } else if (error && typeof error === "object" && "request" in error) {
         // İstek gönderildi ama yanıt alınamadı
-        console.error("İstek gönderildi ama yanıt alınamadı:", (error as { request?: unknown }).request);
+        console.error(
+          "İstek gönderildi ama yanıt alınamadı:",
+          (error as { request?: unknown }).request
+        );
         errorMessage = "Backend'e bağlanılamıyor. Backend çalışıyor mu?";
       } else if (error instanceof Error) {
         // İstek hazırlanırken hata
