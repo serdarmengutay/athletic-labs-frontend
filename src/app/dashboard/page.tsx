@@ -9,12 +9,31 @@ import {
   AlertCircle,
   RefreshCw,
   BarChart3,
+  Plus,
+  FileText,
+  QrCode,
+  Play,
+  Download,
+  Camera,
+  Settings,
+  Activity,
 } from "lucide-react";
 import {
   AdvancedTestSession,
   TestSessionStatus,
+  Club,
+  Athlete,
+  TestSession,
 } from "@/types";
 import { TEST_STATIONS } from "@/lib/testStations";
+import ClubModal from "@/components/ClubModal";
+import ExcelImportModal from "@/components/ExcelImportModal";
+import TestSessionModal from "@/components/TestSessionModal";
+import QRPrintModal from "@/components/QRPrintModal";
+import BulkQRPrintModal from "@/components/BulkQRPrintModal";
+import QRScanner from "@/components/QRScanner";
+import StationSelection from "@/components/StationSelection";
+import { clubApi, athleteApi, testApi, qrApi } from "@/lib/api";
 
 export default function Dashboard() {
   const [currentSession, setCurrentSession] =
@@ -25,470 +44,568 @@ export default function Dashboard() {
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Mock data - gerçek uygulamada WebSocket veya polling ile güncellenecek
+  // Modal states
+  const [showClubModal, setShowClubModal] = useState(false);
+  const [showExcelImport, setShowExcelImport] = useState(false);
+  const [showTestSessionModal, setShowTestSessionModal] = useState(false);
+  const [showQRPrint, setShowQRPrint] = useState(false);
+  const [showBulkQRPrint, setShowBulkQRPrint] = useState(false);
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [showStationSelection, setShowStationSelection] = useState(false);
+
+  // Data states
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [athletes, setAthletes] = useState<Athlete[]>([]);
+  const [testSessions, setTestSessions] = useState<TestSession[]>([]);
+  const [selectedClub, setSelectedClub] = useState<Club | null>(null);
+  const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
+
   useEffect(() => {
-    const mockSession: AdvancedTestSession = {
-      id: "session-1",
-      club_id: "club-1",
-      test_date: new Date().toISOString(),
-      status: "active",
-      notes: "Günlük test oturumu",
-      stations: TEST_STATIONS,
-      coaches: [
-        {
-          id: "coach-1",
-          name: "Ahmet Yılmaz",
-          email: "ahmet@example.com",
-          role: "supervisor",
-          assigned_stations: ["ffmi-station", "sprint-30m-station"],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          id: "coach-2",
-          name: "Mehmet Kaya",
-          email: "mehmet@example.com",
-          role: "station_coach",
-          assigned_stations: ["agility-station"],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      ],
-      athletes: [
-        {
-          id: "athlete-1",
-          uuid: "ATH001",
-          first_name: "Ali",
-          last_name: "Veli",
-          birth_date: "2000-01-01",
-          height: 180,
-          weight: 75,
-          bmi: 23.1,
-          club_id: "club-1",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          id: "athlete-2",
-          uuid: "ATH002",
-          first_name: "Ayşe",
-          last_name: "Demir",
-          birth_date: "2001-05-15",
-          height: 165,
-          weight: 60,
-          bmi: 22.0,
-          club_id: "club-1",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      ],
-      session_statuses: [],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    setCurrentSession(mockSession);
-
-    // Mock session statuses
-    const mockStatuses: TestSessionStatus[] = [
-      {
-        id: "status-1",
-        test_session_id: "session-1",
-        athlete_id: "athlete-1",
-        station_id: "ffmi-station",
-        status: "completed",
-        value: 25.5,
-        coach_id: "coach-1",
-        completed_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-        notes: "İyi performans",
-      },
-      {
-        id: "status-2",
-        test_session_id: "session-1",
-        athlete_id: "athlete-1",
-        station_id: "sprint-30m-station",
-        status: "in_progress",
-        coach_id: "coach-1",
-      },
-      {
-        id: "status-3",
-        test_session_id: "session-1",
-        athlete_id: "athlete-2",
-        station_id: "ffmi-station",
-        status: "completed",
-        value: 22.8,
-        coach_id: "coach-1",
-        completed_at: new Date(Date.now() - 1000 * 60 * 3).toISOString(),
-      },
-    ];
-
-    setSessionStatuses(mockStatuses);
+    loadInitialData();
   }, []);
 
-  const refreshData = async () => {
-    setIsRefreshing(true);
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setLastUpdate(new Date());
-    setIsRefreshing(false);
-  };
+  const loadInitialData = async () => {
+    try {
+      const [clubsRes, athletesRes] = await Promise.all([
+        clubApi.getAll(),
+        athleteApi.getAll(),
+      ]);
 
-  const getAthleteProgress = (athleteId: string) => {
-    const athleteStatuses = sessionStatuses.filter(
-      (s) => s.athlete_id === athleteId
-    );
-    const completed = athleteStatuses.filter(
-      (s) => s.status === "completed"
-    ).length;
-    const total = currentSession?.stations.length || 0;
-    return {
-      completed,
-      total,
-      percentage: total > 0 ? (completed / total) * 100 : 0,
-    };
-  };
-
-  const getStationProgress = (stationId: string) => {
-    const stationStatuses = sessionStatuses.filter(
-      (s) => s.station_id === stationId
-    );
-    const completed = stationStatuses.filter(
-      (s) => s.status === "completed"
-    ).length;
-    const total = currentSession?.athletes.length || 0;
-    return {
-      completed,
-      total,
-      percentage: total > 0 ? (completed / total) * 100 : 0,
-    };
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "completed":
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case "in_progress":
-        return <Clock className="h-4 w-4 text-yellow-500" />;
-      case "pending":
-        return <AlertCircle className="h-4 w-4 text-gray-400" />;
-      default:
-        return <AlertCircle className="h-4 w-4 text-gray-400" />;
+      setClubs(clubsRes.data.data || []);
+      setAthletes(athletesRes.data.data || []);
+      setTestSessions([]); // Test oturumları şimdilik boş
+    } catch (error) {
+      console.error("Veri yüklenirken hata:", error);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "bg-green-100 text-green-800";
-      case "in_progress":
-        return "bg-yellow-100 text-yellow-800";
-      case "pending":
-        return "bg-gray-100 text-gray-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
+  const handleClubSuccess = () => {
+    loadInitialData(); // Verileri yeniden yükle
+    setShowClubModal(false);
   };
 
-  if (!currentSession) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  const handleExcelImportSuccess = (result: any) => {
+    console.log("Excel import başarılı:", result);
+    loadInitialData(); // Verileri yeniden yükle
+    setShowExcelImport(false);
+  };
+
+  const handleTestSessionSuccess = (newSession: TestSession) => {
+    setTestSessions((prev) => [...prev, newSession]);
+    setShowTestSessionModal(false);
+  };
+
+  const handleQRPrint = (athlete: Athlete) => {
+    setSelectedAthlete(athlete);
+    setShowQRPrint(true);
+  };
+
+  const handleBulkQRPrint = (club: Club) => {
+    setSelectedClub(club);
+    setShowBulkQRPrint(true);
+  };
+
+  const handleStartTest = () => {
+    setShowStationSelection(true);
+  };
+
+  const handleQRScan = (qrData: string) => {
+    console.log("QR kod okundu:", qrData);
+    // QR kod verisini işle - burada sporcu bilgilerini çıkarabilirsiniz
+    try {
+      const data = JSON.parse(qrData);
+      console.log("QR kod verisi:", data);
+      // Sporcu bilgilerini göster veya işle
+      alert(
+        `QR kod okundu!\nSporcu: ${data.first_name} ${data.last_name}\nKulüp: ${data.club_name}`
+      );
+    } catch (error) {
+      console.error("QR kod verisi parse edilemedi:", error);
+      alert(`QR kod okundu: ${qrData}`);
+    }
+    setShowQRScanner(false);
+  };
+
+  const calculateAge = (birthYear: number) => {
+    if (!birthYear) return "Bilinmiyor";
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    return currentYear - birthYear;
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Test Takip Dashboard
-              </h1>
-              <p className="text-gray-600">
-                {currentSession.club?.name} -{" "}
-                {new Date(currentSession.test_date).toLocaleDateString("tr-TR")}
-              </p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="text-sm text-gray-500">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8 text-center">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+            Athletic Labs
+          </h1>
+          <p className="text-xl text-gray-600">
+            Sporcu Performans Takip Sistemi
+          </p>
+          <div className="mt-4 flex justify-center">
+            <div className="bg-white rounded-full px-6 py-2 shadow-lg">
+              <span className="text-sm text-gray-600">
                 Son güncelleme: {lastUpdate.toLocaleTimeString("tr-TR")}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Ana İşlemler - Daha Büyük ve Görsel */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Kulüp Yönetimi */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <MapPin className="h-8 w-8 text-blue-600" />
               </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">
+                Kulüp Yönetimi
+              </h3>
+              <div className="space-y-3">
+                <button
+                  onClick={() => setShowClubModal(true)}
+                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <Plus className="h-5 w-5" />
+                  <span>Yeni Kulüp</span>
+                </button>
+                <button
+                  onClick={() => setShowExcelImport(true)}
+                  className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl hover:from-green-700 hover:to-green-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <FileText className="h-5 w-5" />
+                  <span>Sporcu İçe Aktar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Test Yönetimi */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Activity className="h-8 w-8 text-purple-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">
+                Test Yönetimi
+              </h3>
+              <div className="space-y-3">
+                <button
+                  onClick={() => setShowTestSessionModal(true)}
+                  className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-xl hover:from-purple-700 hover:to-purple-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <Clock className="h-5 w-5" />
+                  <span>Test Oturumu</span>
+                </button>
+                <button
+                  onClick={handleStartTest}
+                  className="w-full bg-gradient-to-r from-orange-600 to-orange-700 text-white px-6 py-3 rounded-xl hover:from-orange-700 hover:to-orange-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <Play className="h-5 w-5" />
+                  <span>Teste Başla</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* QR Kod İşlemleri */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <QrCode className="h-8 w-8 text-indigo-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">
+                QR Kodlar
+              </h3>
+              <div className="space-y-3">
+                <button
+                  onClick={() => setShowBulkQRPrint(true)}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-6 py-3 rounded-xl hover:from-indigo-700 hover:to-indigo-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <Download className="h-5 w-5" />
+                  <span>Toplu QR Yazdır</span>
+                </button>
+                <button
+                  onClick={() => setShowQRScanner(true)}
+                  className="w-full bg-gradient-to-r from-teal-600 to-teal-700 text-white px-6 py-3 rounded-xl hover:from-teal-700 hover:to-teal-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <Camera className="h-5 w-5" />
+                  <span>QR Okut</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Sistem Durumu */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <BarChart3 className="h-8 w-8 text-green-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">
+                Sistem Durumu
+              </h3>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Sporcular:</span>
+                  <span className="font-bold text-blue-600">
+                    {athletes.length}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Kulüpler:</span>
+                  <span className="font-bold text-green-600">
+                    {clubs.length}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Testler:</span>
+                  <span className="font-bold text-purple-600">
+                    {testSessions.length}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* İstatistik Kartları - Daha Büyük ve Renkli */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl shadow-xl p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm font-medium">
+                  Toplam Sporcu
+                </p>
+                <p className="text-3xl font-bold">{athletes.length}</p>
+              </div>
+              <Users className="h-12 w-12 text-blue-200" />
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl shadow-xl p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-green-100 text-sm font-medium">Kulüpler</p>
+                <p className="text-3xl font-bold">{clubs.length}</p>
+              </div>
+              <MapPin className="h-12 w-12 text-green-200" />
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-2xl shadow-xl p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-yellow-100 text-sm font-medium">
+                  Test Oturumları
+                </p>
+                <p className="text-3xl font-bold">{testSessions.length}</p>
+              </div>
+              <Clock className="h-12 w-12 text-yellow-200" />
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl shadow-xl p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-purple-100 text-sm font-medium">QR Kodlar</p>
+                <p className="text-3xl font-bold">{athletes.length}</p>
+              </div>
+              <QrCode className="h-12 w-12 text-purple-200" />
+            </div>
+          </div>
+        </div>
+
+        {/* Kulüpler ve Sporcular - Daha Modern Tasarım */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+          {/* Kulüpler */}
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold text-white">Kulüpler</h2>
+                <button
+                  onClick={() => setShowClubModal(true)}
+                  className="bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg hover:bg-opacity-30 transition-all duration-200 flex items-center space-x-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Yeni Kulüp</span>
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              {clubs.length === 0 ? (
+                <div className="text-center py-12">
+                  <MapPin className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 text-lg">
+                    Henüz kulüp eklenmemiş
+                  </p>
+                  <p className="text-gray-400 text-sm mt-2">
+                    Yeni kulüp eklemek için yukarıdaki butonu kullanın
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {clubs.map((club) => (
+                    <div
+                      key={club.id}
+                      className="border border-gray-200 rounded-xl p-4 hover:shadow-lg transition-all duration-200 hover:border-blue-300"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="font-bold text-gray-900 text-lg">
+                            {club.name}
+                          </h3>
+                          <p className="text-gray-600 flex items-center mt-1">
+                            <MapPin className="h-4 w-4 mr-1" />
+                            {club.city}
+                          </p>
+                          <p className="text-sm text-gray-500 mt-2">
+                            İletişim: {club.contact_person_name} -{" "}
+                            {club.contact_person_phone}
+                          </p>
+                          <div className="mt-2 flex items-center space-x-4">
+                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                              {
+                                athletes.filter((a) => a.club_id === club.id)
+                                  .length
+                              }{" "}
+                              sporcu
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleBulkQRPrint(club)}
+                            className="bg-indigo-100 text-indigo-700 px-3 py-2 rounded-lg hover:bg-indigo-200 transition-colors duration-200 flex items-center space-x-1"
+                          >
+                            <QrCode className="h-4 w-4" />
+                            <span className="text-sm">QR Yazdır</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Sporcular */}
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="bg-gradient-to-r from-green-500 to-green-600 px-6 py-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold text-white">Sporcular</h2>
+                <button
+                  onClick={() => setShowExcelImport(true)}
+                  className="bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg hover:bg-opacity-30 transition-all duration-200 flex items-center space-x-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>Sporcu Ekle</span>
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              {athletes.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 text-lg">
+                    Henüz sporcu eklenmemiş
+                  </p>
+                  <p className="text-gray-400 text-sm mt-2">
+                    Excel ile sporcu import edin veya manuel ekleyin
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {athletes.slice(0, 10).map((athlete) => (
+                    <div
+                      key={athlete.id}
+                      className="border border-gray-200 rounded-xl p-4 hover:shadow-lg transition-all duration-200 hover:border-green-300"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="font-bold text-gray-900 text-lg">
+                            {athlete.first_name} {athlete.last_name}
+                          </h3>
+                          <div className="mt-2 space-y-1">
+                            <p className="text-sm text-gray-600 flex items-center">
+                              <span className="font-medium">Kod:</span>
+                              <span className="ml-2 bg-gray-100 px-2 py-1 rounded text-xs font-mono">
+                                {athlete.athlete_code || "Yok"}
+                              </span>
+                            </p>
+                            <p className="text-sm text-gray-600 flex items-center">
+                              <span className="font-medium">Yaş:</span>
+                              <span className="ml-2 bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
+                                {calculateAge(athlete.birth_year)}
+                              </span>
+                            </p>
+                            <p className="text-sm text-gray-600 flex items-center">
+                              <span className="font-medium">Kulüp:</span>
+                              <span className="ml-2">{athlete.club?.name}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleQRPrint(athlete)}
+                            className="bg-green-100 text-green-700 px-3 py-2 rounded-lg hover:bg-green-200 transition-colors duration-200 flex items-center space-x-1"
+                          >
+                            <QrCode className="h-4 w-4" />
+                            <span className="text-sm">QR Yazdır</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {athletes.length > 10 && (
+                    <div className="text-center text-gray-500 text-sm py-4">
+                      ... ve {athletes.length - 10} sporcu daha
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Test Oturumları */}
+        <div className="mt-8 bg-white rounded-2xl shadow-xl overflow-hidden">
+          <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-white">Test Oturumları</h2>
               <button
-                onClick={refreshData}
-                disabled={isRefreshing}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-2"
+                onClick={() => setShowTestSessionModal(true)}
+                className="bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg hover:bg-opacity-30 transition-all duration-200 flex items-center space-x-2"
               >
-                <RefreshCw
-                  className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
-                />
-                <span>Yenile</span>
+                <Plus className="h-4 w-4" />
+                <span>Yeni Oturum</span>
               </button>
             </div>
           </div>
-        </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Genel İstatistikler */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Users className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Sporcular</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {currentSession.athletes.length}
+          <div className="p-6">
+            {testSessions.length === 0 ? (
+              <div className="text-center py-12">
+                <Clock className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg">
+                  Henüz test oturumu oluşturulmamış
+                </p>
+                <p className="text-gray-400 text-sm mt-2">
+                  Test oturumu oluşturup teste başlayın
                 </p>
               </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <MapPin className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">İstasyonlar</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {currentSession.stations.length}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <Clock className="h-6 w-6 text-yellow-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Hocalar</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {currentSession.coaches.length}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <BarChart3 className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Tamamlanan</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {
-                    sessionStatuses.filter((s) => s.status === "completed")
-                      .length
-                  }
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-8">
-          {/* Sporcu İlerlemesi */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Sporcu İlerlemesi
-              </h2>
-            </div>
-            <div className="p-6">
+            ) : (
               <div className="space-y-4">
-                {currentSession.athletes.map((athlete) => {
-                  const progress = getAthleteProgress(athlete.id);
-                  return (
-                    <div key={athlete.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <h3 className="font-medium text-gray-900">
-                            {athlete.first_name} {athlete.last_name}
-                          </h3>
-                          <p className="text-sm text-gray-600">
-                            {athlete.uuid}
+                {testSessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className="border border-gray-200 rounded-xl p-4 hover:shadow-lg transition-all duration-200 hover:border-purple-300"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-bold text-gray-900 text-lg">
+                          {session.club?.name || "Bilinmeyen Kulüp"}
+                        </h3>
+                        <p className="text-gray-600 flex items-center mt-1">
+                          <Clock className="h-4 w-4 mr-1" />
+                          {new Date(session.test_date).toLocaleDateString(
+                            "tr-TR"
+                          )}
+                        </p>
+                        {session.notes && (
+                          <p className="text-sm text-gray-500 mt-2">
+                            {session.notes}
                           </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-medium text-gray-900">
-                            {progress.completed}/{progress.total}
-                          </p>
-                          <p className="text-xs text-gray-500">İstasyon</p>
-                        </div>
+                        )}
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${progress.percentage}%` }}
-                        ></div>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        %{progress.percentage.toFixed(0)} tamamlandı
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* İstasyon Durumu */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                İstasyon Durumu
-              </h2>
-            </div>
-            <div className="p-6">
-              <div className="space-y-4">
-                {currentSession.stations.map((station) => {
-                  const progress = getStationProgress(station.id);
-                  return (
-                    <div key={station.id} className="border rounded-lg p-4">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <span className="text-2xl">{station.icon}</span>
-                        <div className="flex-1">
-                          <h3 className="font-medium text-gray-900">
-                            {station.name}
-                          </h3>
-                          <p className="text-sm text-gray-600">
-                            {station.description}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-medium text-gray-900">
-                            {progress.completed}/{progress.total}
-                          </p>
-                          <p className="text-xs text-gray-500">Sporcu</p>
-                        </div>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${progress.percentage}%` }}
-                        ></div>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        %{progress.percentage.toFixed(0)} tamamlandı
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Detaylı Test Durumu */}
-        <div className="mt-8 bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Detaylı Test Durumu
-            </h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Sporcu
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    İstasyon
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Durum
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Değer
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Hoca
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Zaman
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {sessionStatuses.map((status) => {
-                  const athlete = currentSession.athletes.find(
-                    (a) => a.id === status.athlete_id
-                  );
-                  const station = currentSession.stations.find(
-                    (s) => s.id === status.station_id
-                  );
-                  const coach = currentSession.coaches.find(
-                    (c) => c.id === status.coach_id
-                  );
-
-                  return (
-                    <tr key={status.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {athlete?.first_name} {athlete?.last_name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {athlete?.uuid}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-lg">{station?.icon}</span>
-                          <span className="text-sm text-gray-900">
-                            {station?.name}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                            status.status
-                          )}`}
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={handleStartTest}
+                          className="bg-orange-100 text-orange-700 px-4 py-2 rounded-lg hover:bg-orange-200 transition-colors duration-200 flex items-center space-x-2"
                         >
-                          {getStatusIcon(status.status)}
-                          <span className="ml-1">
-                            {status.status === "completed"
-                              ? "Tamamlandı"
-                              : status.status === "in_progress"
-                              ? "Devam Ediyor"
-                              : "Bekliyor"}
-                          </span>
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {status.value
-                          ? `${status.value} ${station?.unit}`
-                          : "-"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {coach?.name || "-"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {status.completed_at
-                          ? new Date(status.completed_at).toLocaleTimeString(
-                              "tr-TR"
-                            )
-                          : "-"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          <Play className="h-4 w-4" />
+                          <span>Teste Başla</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      {showClubModal && (
+        <ClubModal
+          onClose={() => setShowClubModal(false)}
+          onSuccess={handleClubSuccess}
+        />
+      )}
+
+      {showExcelImport && (
+        <ExcelImportModal
+          isOpen={showExcelImport}
+          onClose={() => setShowExcelImport(false)}
+          clubId={selectedClub?.id || ""}
+          onImportSuccess={handleExcelImportSuccess}
+        />
+      )}
+
+      {showTestSessionModal && (
+        <TestSessionModal
+          isOpen={showTestSessionModal}
+          onClose={() => setShowTestSessionModal(false)}
+          onSuccess={handleTestSessionSuccess}
+        />
+      )}
+
+      {showQRPrint && selectedAthlete && (
+        <QRPrintModal
+          isOpen={showQRPrint}
+          onClose={() => setShowQRPrint(false)}
+          athleteData={{
+            athlete_id: selectedAthlete.id,
+            first_name: selectedAthlete.first_name,
+            last_name: selectedAthlete.last_name,
+            birth_date: `${selectedAthlete.birth_year}-01-01`,
+            club_name: selectedAthlete.club?.name || "",
+          }}
+        />
+      )}
+
+      {showBulkQRPrint && selectedClub && (
+        <BulkQRPrintModal
+          isOpen={showBulkQRPrint}
+          onClose={() => setShowBulkQRPrint(false)}
+          athletes={athletes
+            .filter((a) => a.club_id === selectedClub.id)
+            .map((athlete) => ({
+              athlete_id: athlete.id,
+              first_name: athlete.first_name,
+              last_name: athlete.last_name,
+              birth_date: `${athlete.birth_year}-01-01`,
+              club_name: athlete.club?.name || "",
+            }))}
+          clubName={selectedClub.name}
+        />
+      )}
+
+      {showQRScanner && (
+        <QRScanner
+          isOpen={showQRScanner}
+          onClose={() => setShowQRScanner(false)}
+          onScan={handleQRScan}
+        />
+      )}
+
+      {showStationSelection && (
+        <StationSelection onBack={() => setShowStationSelection(false)} />
+      )}
     </div>
   );
 }

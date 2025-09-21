@@ -9,6 +9,7 @@ import {
   Users,
   AlertCircle,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { Club } from "@/types";
 
 interface AthleteImportModalProps {
@@ -47,57 +48,77 @@ export default function AthleteImportModal({
     setError("");
 
     try {
-      const text = await file.text();
-      const lines = text.split("\n").filter((line) => line.trim());
+      // Excel dosyasını oku
+      const data = new Uint8Array(await file.arrayBuffer());
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-      if (lines.length < 2) {
-        throw new Error("Dosya en az 2 satır içermeli (başlık + veri)");
-      }
-
-      const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
-      const requiredHeaders = ["ad", "soyad", "doğum_tarihi"];
-
-      // Başlık kontrolü
-      const missingHeaders = requiredHeaders.filter(
-        (h) => !headers.includes(h)
-      );
-      if (missingHeaders.length > 0) {
-        throw new Error(`Eksik sütunlar: ${missingHeaders.join(", ")}`);
+      if (jsonData.length === 0) {
+        throw new Error("Excel dosyası boş veya geçersiz format");
       }
 
       const athletes: ImportedAthlete[] = [];
 
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(",").map((v) => v.trim());
+      jsonData.forEach((row: any, index: number) => {
+        const rowNumber = index + 2; // Excel'de satır numarası (header + 1)
 
-        if (values.length < 3) continue;
+        // Sütun sırasına göre veri al (1. sütun: Ad, 2. sütun: Soyad, 3. sütun: Doğum Yılı)
+        const rowValues = Object.values(row);
+        const firstName = rowValues[0]?.toString().trim();
+        const lastName = rowValues[1]?.toString().trim();
+        const birthYearStr = rowValues[2]?.toString().trim();
 
-        const athlete: ImportedAthlete = {
-          first_name: values[headers.indexOf("ad")] || "",
-          last_name: values[headers.indexOf("soyad")] || "",
-          birth_date: values[headers.indexOf("doğum_tarihi")] || "",
-        };
-
-        // Opsiyonel alanlar
-        if (headers.includes("boy") && values[headers.indexOf("boy")]) {
-          athlete.height = parseFloat(values[headers.indexOf("boy")]);
-        }
-        if (headers.includes("kilo") && values[headers.indexOf("kilo")]) {
-          athlete.weight = parseFloat(values[headers.indexOf("kilo")]);
+        if (!firstName || !lastName || !birthYearStr) {
+          throw new Error(
+            `Satır ${rowNumber}: 1. sütun (Ad), 2. sütun (Soyad) ve 3. sütun (Doğum Yılı) alanları zorunludur`
+          );
         }
 
-        // Tarih formatını kontrol et
-        if (athlete.birth_date) {
-          const date = new Date(athlete.birth_date);
-          if (isNaN(date.getTime())) {
+        // Doğum yılını kontrol et
+        let birthYear: number;
+
+        // Sadece yıl verilmişse (4 haneli sayı)
+        if (/^\d{4}$/.test(birthYearStr)) {
+          birthYear = parseInt(birthYearStr);
+        } else {
+          // Tam tarih formatından yıl çıkar
+          const birthDate = new Date(birthYearStr);
+          if (isNaN(birthDate.getTime())) {
             throw new Error(
-              `${i + 1}. satırda geçersiz tarih formatı: ${athlete.birth_date}`
+              `Satır ${rowNumber}: Geçersiz doğum yılı formatı (${birthYearStr})`
             );
           }
+          birthYear = birthDate.getFullYear();
+        }
+
+        if (
+          isNaN(birthYear) ||
+          birthYear < 1900 ||
+          birthYear > new Date().getFullYear()
+        ) {
+          throw new Error(
+            `Satır ${rowNumber}: Geçersiz doğum yılı (${birthYearStr}) - 1900-${new Date().getFullYear()} arasında olmalı`
+          );
+        }
+
+        const athlete: ImportedAthlete = {
+          first_name: firstName,
+          last_name: lastName,
+          birth_date: new Date(birthYear, 0, 1).toISOString().split("T")[0], // 1 Ocak olarak ayarla
+        };
+
+        // Opsiyonel alanlar (4. ve 5. sütunlar)
+        if (rowValues[3]) {
+          athlete.height = parseFloat(rowValues[3].toString());
+        }
+        if (rowValues[4]) {
+          athlete.weight = parseFloat(rowValues[4].toString());
         }
 
         athletes.push(athlete);
-      }
+      });
 
       if (athletes.length === 0) {
         throw new Error("Geçerli sporcu verisi bulunamadı");
@@ -114,16 +135,29 @@ export default function AthleteImportModal({
   };
 
   const downloadTemplate = () => {
-    const csvContent =
-      "Ad,Soyad,Doğum Tarihi,Boy,Kilo\n" +
-      "Ahmet,Yılmaz,2000-01-15,180,75\n" +
-      "Mehmet,Kaya,2001-03-20,175,70\n" +
-      "Ayşe,Demir,2000-11-10,165,60";
+    // Excel template oluştur
+    const worksheetData = [
+      ["Ad", "Soyad", "Doğum Yılı", "Boy", "Kilo"], // Header
+      ["Ahmet", "Yılmaz", 2000, 180, 75],
+      ["Mehmet", "Kaya", 2001, 175, 70],
+      ["Ayşe", "Demir", 2000, 165, 60],
+    ];
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Sporcular");
+
+    const excelBuffer = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "array",
+    });
+    const blob = new Blob([excelBuffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "sporcu_listesi_template.csv";
+    link.download = "sporcu_listesi_template.xlsx";
     link.click();
   };
 
@@ -176,14 +210,14 @@ export default function AthleteImportModal({
             </h3>
             <p className="text-sm text-blue-700 mb-3">
               Önce aşağıdaki template dosyasını indirip sporcu bilgilerinizi
-              doldurun.
+              doldurun. Sütun sırası önemlidir: 1. Ad, 2. Soyad, 3. Doğum Yılı.
             </p>
             <button
               onClick={downloadTemplate}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
             >
               <Download className="h-4 w-4" />
-              <span>Template İndir (.csv)</span>
+              <span>Template İndir (.xlsx)</span>
             </button>
           </div>
 
@@ -196,13 +230,13 @@ export default function AthleteImportModal({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".xlsx,.xls"
                 onChange={handleFileUpload}
                 className="hidden"
               />
               <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 mb-4">
-                CSV veya Excel dosyasını seçin
+                Excel dosyasını seçin (.xlsx, .xls)
               </p>
               <button
                 onClick={() => fileInputRef.current?.click()}

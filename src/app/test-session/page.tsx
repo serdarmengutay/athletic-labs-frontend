@@ -12,12 +12,8 @@ import {
   Settings,
   UserPlus,
 } from "lucide-react";
-import {
-  Club,
-  Athlete,
-  Coach,
-  AdvancedTestSession,
-} from "@/types";
+import { Club, Athlete, Coach, AdvancedTestSession } from "@/types";
+import BulkQRPrintModal from "@/components/BulkQRPrintModal";
 import { TEST_STATIONS } from "@/lib/testStations";
 import { clubApi, athleteApi } from "@/lib/api";
 import CoachModal from "@/components/CoachModal";
@@ -291,7 +287,7 @@ export default function TestSessionPage() {
                               {athlete.first_name} {athlete.last_name}
                             </h4>
                             <p className="text-sm text-gray-600">
-                              {athlete.uuid}
+                              {athlete.athlete_code}
                             </p>
                           </div>
                           {selectedAthletes.find(
@@ -535,7 +531,9 @@ export default function TestSessionPage() {
                       <h4 className="font-medium text-gray-900">
                         {athlete.first_name} {athlete.last_name}
                       </h4>
-                      <p className="text-sm text-gray-600">{athlete.uuid}</p>
+                      <p className="text-sm text-gray-600">
+                        {athlete.athlete_code}
+                      </p>
                     </div>
                     <div className="flex items-center space-x-2">
                       <QrCode className="h-5 w-5 text-gray-400" />
@@ -569,22 +567,26 @@ export default function TestSessionPage() {
           }}
           onSuccess={(importedAthletes) => {
             // Convert ImportedAthlete to Athlete format
-            const convertedAthletes: Athlete[] = importedAthletes.map((athlete, index) => ({
-              id: `imported-${Date.now()}-${index}`,
-              uuid: `IMP${String(index + 1).padStart(3, '0')}`,
-              first_name: athlete.first_name,
-              last_name: athlete.last_name,
-              birth_date: athlete.birth_date,
-              height: athlete.height || 0,
-              weight: athlete.weight || 0,
-              bmi: athlete.height && athlete.weight 
-                ? athlete.weight / Math.pow(athlete.height / 100, 2) 
-                : 0,
-              club_id: selectedClubForImport?.id || '',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            }));
-            
+            const convertedAthletes: Athlete[] = importedAthletes.map(
+              (athlete, index) => ({
+                id: `imported-${Date.now()}-${index}`,
+                athlete_code: `IMP${String(index + 1).padStart(3, "0")}`,
+                first_name: athlete.first_name,
+                last_name: athlete.last_name,
+                birth_year: new Date(athlete.birth_date).getFullYear(),
+                birth_date: athlete.birth_date,
+                height: athlete.height || 0,
+                weight: athlete.weight || 0,
+                bmi:
+                  athlete.height && athlete.weight
+                    ? athlete.weight / Math.pow(athlete.height / 100, 2)
+                    : 0,
+                club_id: selectedClubForImport?.id || "",
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+            );
+
             setAthletes((prev) => [...prev, ...convertedAthletes]);
             setShowImportModal(false);
             setSelectedClubForImport(null);
@@ -601,11 +603,18 @@ export default function TestSessionPage() {
       )}
 
       {/* QR Print Modal */}
-      {showQRModal && currentSession && (
-        <QRPrintModal
+      {showQRModal && selectedAthletes.length > 0 && (
+        <BulkQRPrintModal
+          isOpen={showQRModal}
           onClose={() => setShowQRModal(false)}
-          session={currentSession}
-          athletes={selectedAthletes}
+          athletes={selectedAthletes.map((athlete) => ({
+            athlete_id: athlete.id,
+            first_name: athlete.first_name,
+            last_name: athlete.last_name,
+            birth_date: `${athlete.birth_year}-01-01`,
+            club_name: athlete.club?.name || "",
+          }))}
+          clubName={currentSession?.club?.name || "Test Oturumu"}
         />
       )}
     </div>

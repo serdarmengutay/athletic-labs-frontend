@@ -29,14 +29,19 @@
     "@headlessui/react": "^2.2.7",
     "@types/qrcode": "^1.5.5",
     "@yudiel/react-qr-scanner": "^2.3.1",
+    "@zxing/library": "^0.21.3",
     "axios": "^1.11.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.3",
     "jszip": "^3.10.1",
     "lucide-react": "^0.543.0",
     "next": "15.5.2",
     "qrcode": "^1.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "recharts": "^3.2.0"
+    "react-dropzone": "^14.3.8",
+    "recharts": "^3.2.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

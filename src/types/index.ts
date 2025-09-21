@@ -2,19 +2,25 @@ export interface Club {
   id: string; // UUID formatında
   name: string;
   city: string;
+  contact_person_name: string;
+  contact_person_phone: string;
+  contact_person_email: string;
+  athlete_count: number;
   created_at: string;
   updated_at: string;
 }
 
 export interface Athlete {
   id: string; // UUID formatında
-  uuid: string;
+  athlete_code: string;
   first_name: string;
   last_name: string;
-  birth_date: string;
+  birth_year: number;
+  birth_date?: string; // Frontend için hesaplanacak
   height: number;
   weight: number;
   bmi: number;
+  ffmi?: number;
   club_id: string; // UUID formatında
   created_at: string;
   updated_at: string;
@@ -134,4 +140,59 @@ export interface ApiResponse<T> {
   data: T;
   message?: string;
   count?: number;
+}
+
+// Excel Import Types
+export interface ExcelAthleteData {
+  first_name: string;
+  last_name: string;
+  birth_date: string;
+}
+
+export interface ExcelImportResult {
+  success: boolean;
+  imported_count: number;
+  errors: string[];
+  athletes: Athlete[];
+}
+
+// QR Code Types
+export interface QRCodeData {
+  athlete_id: string;
+  first_name: string;
+  last_name: string;
+  birth_date: string;
+  club_name: string;
+}
+
+// Test Station Types
+export interface TestStationData {
+  id: string;
+  name: string;
+  type: "ffmi" | "sprint_30m" | "agility" | "vertical_jump" | "flexibility";
+  description: string;
+  required_coaches: number;
+  unit: string;
+  icon: string;
+  fields: TestField[];
+}
+
+export interface TestField {
+  id: string;
+  name: string;
+  type: "number" | "text" | "select";
+  unit: string;
+  required: boolean;
+  min?: number;
+  max?: number;
+  options?: string[];
+}
+
+// Station Coach Interface
+export interface StationCoach {
+  id: string;
+  name: string;
+  station_id: string;
+  station_name: string;
+  is_active: boolean;
 }

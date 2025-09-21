@@ -20,29 +20,58 @@ export default function LoginPage() {
     setError("");
 
     try {
+      console.log("Login isteği gönderiliyor:", formData);
+
       const response = await authApi.coachLogin(
         formData.email,
         formData.password
       );
 
-      // Token'ı localStorage'a kaydet
-      localStorage.setItem("authToken", response.data.data.token);
+      console.log("Login yanıtı:", response.data);
 
-      // Hoca bilgilerini kaydet
-      localStorage.setItem(
-        "coachData",
-        JSON.stringify(response.data.data.coach)
-      );
+      // Response yapısını kontrol et
+      if (response.data && response.data.success && response.data.data) {
+        // Token'ı localStorage'a kaydet
+        localStorage.setItem("authToken", response.data.data.token);
 
-      // İstasyon sayfasına yönlendir
-      const stationId =
-        response.data.data.coach.assigned_stations[0] || "ffmi-station";
-      router.push(`/station?station=${stationId}`);
-    } catch (err: unknown) {
-      const errorMessage = err && typeof err === 'object' && 'response' in err 
-        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message 
-        : "Giriş yapılamadı. Lütfen bilgilerinizi kontrol edin.";
-      setError(errorMessage || "Giriş yapılamadı. Lütfen bilgilerinizi kontrol edin.");
+        // Hoca bilgilerini kaydet
+        localStorage.setItem(
+          "coachData",
+          JSON.stringify(response.data.data.coach)
+        );
+
+        console.log("Token kaydedildi:", response.data.data.token);
+        console.log("Hoca bilgileri kaydedildi:", response.data.data.coach);
+
+        // İstasyon sayfasına yönlendir
+        const stationId =
+          response.data.data.coach.assigned_stations?.[0] || "ffmi-station";
+
+        console.log("Yönlendiriliyor:", `/station?station=${stationId}`);
+        router.push(`/station?station=${stationId}`);
+      } else {
+        throw new Error("Geçersiz yanıt formatı");
+      }
+    } catch (err: any) {
+      console.error("Login hatası:", err);
+
+      let errorMessage = "Giriş yapılamadı. Lütfen bilgilerinizi kontrol edin.";
+
+      if (err?.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err?.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err?.message) {
+        errorMessage = err.message;
+      } else if (err?.response?.status === 401) {
+        errorMessage = "E-posta veya şifre hatalı";
+      } else if (err?.response?.status === 500) {
+        errorMessage = "Sunucu hatası. Lütfen daha sonra tekrar deneyin";
+      } else if (err?.code === "ECONNREFUSED") {
+        errorMessage = "Sunucuya bağlanılamıyor. Backend çalışıyor mu?";
+      }
+
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -173,6 +202,17 @@ export default function LoginPage() {
             <div>
               <strong>Yönetici:</strong> admin@demo.com / admin123
             </div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={() => {
+                setFormData({ email: "ffmi@demo.com", password: "demo123" });
+              }}
+              className="text-xs text-blue-600 hover:text-blue-800 underline"
+            >
+              FFMI hesabını doldur
+            </button>
           </div>
         </div>
       </div>

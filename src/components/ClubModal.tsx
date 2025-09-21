@@ -13,6 +13,9 @@ export default function ClubModal({ onClose, onSuccess }: ClubModalProps) {
   const [formData, setFormData] = useState({
     name: "",
     city: "",
+    contact_person_name: "",
+    contact_person_phone: "",
+    contact_person_email: "",
   });
   const [loading, setLoading] = useState(false);
 
@@ -74,6 +77,63 @@ export default function ClubModal({ onClose, onSuccess }: ClubModalProps) {
               }
               className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
               placeholder="Örn: Bursa"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-white mb-1">
+              İletişim Kişisi Adı
+            </label>
+            <input
+              type="text"
+              required
+              value={formData.contact_person_name}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  contact_person_name: e.target.value,
+                })
+              }
+              className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
+              placeholder="Örn: Ahmet Yılmaz"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-white mb-1">
+              İletişim Telefonu
+            </label>
+            <input
+              type="tel"
+              required
+              value={formData.contact_person_phone}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  contact_person_phone: e.target.value,
+                })
+              }
+              className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
+              placeholder="Örn: 0532 123 45 67"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-white mb-1">
+              İletişim E-posta
+            </label>
+            <input
+              type="email"
+              required
+              value={formData.contact_person_email}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  contact_person_email: e.target.value,
+                })
+              }
+              className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
+              placeholder="Örn: ahmet@bursaspor.com"
             />
           </div>
 

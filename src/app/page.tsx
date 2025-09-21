@@ -64,120 +64,171 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Athletic Labs
-              </h1>
-              <p className="text-gray-600">Sporcu Performans Takip Sistemi</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8 text-center">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+            Athletic Labs
+          </h1>
+          <p className="text-xl text-gray-600">
+            Sporcu Performans Takip Sistemi
+          </p>
+        </div>
+
+        {/* Ana İşlemler - Daha Büyük ve Görsel */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Kulüp Yönetimi */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trophy className="h-8 w-8 text-blue-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">
+                Kulüp Yönetimi
+              </h3>
+              <div className="space-y-3">
+                <button
+                  onClick={() => setShowClubModal(true)}
+                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <Plus className="h-5 w-5" />
+                  <span>Yeni Kulüp</span>
+                </button>
+                <button
+                  onClick={() => setShowAthleteModal(true)}
+                  className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl hover:from-green-700 hover:to-green-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <Users className="h-5 w-5" />
+                  <span>Sporcu Ekle</span>
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <button
-                onClick={() => setShowClubModal(true)}
-                className="bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 flex items-center justify-center space-x-2 text-sm sm:text-base"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Kulüp Ekle</span>
-              </button>
-              <button
-                onClick={() => setShowAthleteModal(true)}
-                className="bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 flex items-center justify-center space-x-2 text-sm sm:text-base"
-              >
-                <Users className="h-4 w-4" />
-                <span>Sporcu Ekle</span>
-              </button>
-              <button
-                onClick={() => setShowTestModal(true)}
-                className="bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 flex items-center justify-center space-x-2 text-sm sm:text-base"
-              >
-                <Trophy className="h-4 w-4" />
-                <span>Test Ekle</span>
-              </button>
-              <a
-                href="/test-session"
-                className="bg-orange-600 text-white px-4 py-3 rounded-lg hover:bg-orange-700 flex items-center justify-center space-x-2 text-sm sm:text-base"
-              >
-                <Play className="h-4 w-4" />
-                <span>Test Oturumu</span>
-              </a>
-              <a
-                href="/dashboard"
-                className="bg-indigo-600 text-white px-4 py-3 rounded-lg hover:bg-indigo-700 flex items-center justify-center space-x-2 text-sm sm:text-base"
-              >
-                <BarChart3 className="h-4 w-4" />
-                <span>Dashboard</span>
-              </a>
-              <a
-                href="/coach-panel"
-                className="bg-teal-600 text-white px-4 py-3 rounded-lg hover:bg-teal-700 flex items-center justify-center space-x-2 text-sm sm:text-base"
-              >
-                <Users className="h-4 w-4" />
-                <span>Hoca Paneli</span>
-              </a>
-              <a
-                href="/login"
-                className="bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 flex items-center justify-center space-x-2 text-sm sm:text-base"
-              >
-                <QrCode className="h-4 w-4" />
-                <span>Hoca Girişi</span>
-              </a>
+          </div>
+
+          {/* Test Yönetimi */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <BarChart3 className="h-8 w-8 text-purple-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">
+                Test Yönetimi
+              </h3>
+              <div className="space-y-3">
+                <button
+                  onClick={() => setShowTestModal(true)}
+                  className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-xl hover:from-purple-700 hover:to-purple-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <Trophy className="h-5 w-5" />
+                  <span>Test Ekle</span>
+                </button>
+                <a
+                  href="/test-session"
+                  className="w-full bg-gradient-to-r from-orange-600 to-orange-700 text-white px-6 py-3 rounded-xl hover:from-orange-700 hover:to-orange-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <Play className="h-5 w-5" />
+                  <span>Test Oturumu</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Dashboard */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <BarChart3 className="h-8 w-8 text-indigo-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">
+                Dashboard
+              </h3>
+              <div className="space-y-3">
+                <a
+                  href="/dashboard"
+                  className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-6 py-3 rounded-xl hover:from-indigo-700 hover:to-indigo-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <BarChart3 className="h-5 w-5" />
+                  <span>Dashboard</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Hoca Paneli */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Users className="h-8 w-8 text-teal-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">
+                Hoca Paneli
+              </h3>
+              <div className="space-y-3">
+                <a
+                  href="/coach-panel"
+                  className="w-full bg-gradient-to-r from-teal-600 to-teal-700 text-white px-6 py-3 rounded-xl hover:from-teal-700 hover:to-teal-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <Users className="h-5 w-5" />
+                  <span>Hoca Paneli</span>
+                </a>
+                <a
+                  href="/login"
+                  className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-xl hover:from-purple-700 hover:to-purple-800 flex items-center justify-center space-x-2 transition-all duration-200"
+                >
+                  <QrCode className="h-5 w-5" />
+                  <span>Hoca Girişi</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>
-      </header>
 
-      {/* Stats */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Trophy className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">
+        {/* İstatistik Kartları - Daha Büyük ve Renkli */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl shadow-xl p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm font-medium">
                   Toplam Kulüp
                 </p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {clubs.length}
-                </p>
+                <p className="text-3xl font-bold">{clubs.length}</p>
               </div>
+              <Trophy className="h-12 w-12 text-blue-200" />
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Users className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">
+          <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl shadow-xl p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-green-100 text-sm font-medium">
                   Toplam Sporcu
                 </p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {athletes.length}
-                </p>
+                <p className="text-3xl font-bold">{athletes.length}</p>
               </div>
+              <Users className="h-12 w-12 text-green-200" />
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <BarChart3 className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">
-                  Test Oturumu
+          <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-2xl shadow-xl p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-yellow-100 text-sm font-medium">
+                  Test Oturumları
                 </p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {testSessions.length}
-                </p>
+                <p className="text-3xl font-bold">{testSessions.length}</p>
               </div>
+              <BarChart3 className="h-12 w-12 text-yellow-200" />
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl shadow-xl p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-purple-100 text-sm font-medium">QR Kodlar</p>
+                <p className="text-3xl font-bold">{athletes.length}</p>
+              </div>
+              <QrCode className="h-12 w-12 text-purple-200" />
             </div>
           </div>
         </div>
@@ -238,15 +289,15 @@ export default function Home() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {athletes.map((athlete) => {
-                  const age =
-                    new Date().getFullYear() -
-                    new Date(athlete.birth_date).getFullYear();
+                  const age = athlete.birth_year
+                    ? new Date().getFullYear() - athlete.birth_year
+                    : 0;
                   const club = clubs.find((c) => c.id === athlete.club_id);
 
                   return (
                     <tr key={athlete.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {athlete.uuid}
+                        {athlete.athlete_code || "Yok"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {athlete.first_name} {athlete.last_name}

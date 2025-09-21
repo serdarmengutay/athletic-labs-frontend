@@ -1,251 +1,202 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, Printer, Download, Users } from "lucide-react";
+import React, { useState, useRef } from "react";
 import QRCode from "qrcode";
-import Image from "next/image";
-import { Athlete, AdvancedTestSession } from "@/types";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import { QRCodeData } from "@/types";
 
 interface QRPrintModalProps {
+  isOpen: boolean;
   onClose: () => void;
-  session: AdvancedTestSession;
-  athletes: Athlete[];
+  athleteData: QRCodeData;
 }
 
-export default function QRPrintModal({
+const QRPrintModal: React.FC<QRPrintModalProps> = ({
+  isOpen,
   onClose,
-  session,
-  athletes,
-}: QRPrintModalProps) {
-  const [qrCodes, setQrCodes] = useState<
-    { athlete: Athlete; qrDataUrl: string }[]
-  >([]);
+  athleteData,
+}) => {
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
 
-  const generateQRCodes = async () => {
-    setIsGenerating(true);
-    const qrDataArray = [];
-
-    for (const athlete of athletes) {
-      try {
-        const qrData = {
-          athleteId: athlete.id,
-          athleteName: `${athlete.first_name} ${athlete.last_name}`,
-          sessionId: session.id,
-          clubId: session.club_id,
-          timestamp: new Date().toISOString(),
-          type: "athletic_test",
-        };
-
-        const qrDataUrl = await QRCode.toDataURL(JSON.stringify(qrData), {
-          width: 200,
-          margin: 2,
-          color: {
-            dark: "#000000",
-            light: "#FFFFFF",
-          },
-        });
-
-        qrDataArray.push({ athlete, qrDataUrl });
-      } catch (error) {
-        console.error(
-          `QR kod oluşturulurken hata (${athlete.first_name}):`,
-          error
-        );
-      }
+  React.useEffect(() => {
+    if (isOpen && athleteData) {
+      generateQRCode();
     }
+  }, [isOpen, athleteData]);
 
-    setQrCodes(qrDataArray);
-    setIsGenerating(false);
+  const generateQRCode = async () => {
+    setIsGenerating(true);
+    try {
+      const qrData = JSON.stringify({
+        athlete_id: athleteData.athlete_id,
+        first_name: athleteData.first_name,
+        last_name: athleteData.last_name,
+        birth_date: athleteData.birth_date,
+        club_name: athleteData.club_name,
+      });
+
+      const qrCodeDataURL = await QRCode.toDataURL(qrData, {
+        width: 200,
+        margin: 2,
+        color: {
+          dark: "#000000",
+          light: "#FFFFFF",
+        },
+      });
+
+      setQrCodeUrl(qrCodeDataURL);
+    } catch (error) {
+      console.error("QR kod oluşturulurken hata:", error);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  useEffect(() => {
-    generateQRCodes();
-  }, [athletes, session]); // eslint-disable-line react-hooks/exhaustive-deps
+  const handlePrint = async () => {
+    if (!printRef.current) return;
 
-  const printQRCodes = () => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+    try {
+      const canvas = await html2canvas(printRef.current, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+      });
 
-    const printContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>QR Kodlar - ${session.club?.name}</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-            .qr-container { 
-              display: grid; 
-              grid-template-columns: repeat(2, 1fr); 
-              gap: 20px; 
-              max-width: 800px; 
-              margin: 0 auto;
-            }
-            .qr-card { 
-              border: 1px solid #ddd; 
-              padding: 15px; 
-              text-align: center; 
-              page-break-inside: avoid;
-            }
-            .qr-code { margin: 10px 0; }
-            .athlete-name { font-weight: bold; font-size: 16px; margin: 10px 0; }
-            .athlete-code { font-size: 14px; color: #666; }
-            .session-info { font-size: 12px; color: #888; margin-top: 10px; }
-            @media print {
-              .qr-container { grid-template-columns: repeat(2, 1fr); }
-              .qr-card { margin-bottom: 20px; }
-            }
-          </style>
-        </head>
-        <body>
-          <h1 style="text-align: center; margin-bottom: 30px;">
-            ${session.club?.name} - Test QR Kodları
-          </h1>
-          <div class="qr-container">
-            ${qrCodes
-              .map(
-                ({ athlete, qrDataUrl }) => `
-              <div class="qr-card">
-                <div class="athlete-name">${athlete.first_name} ${
-                  athlete.last_name
-                }</div>
-                <div class="athlete-code">${athlete.uuid}</div>
-                <div class="qr-code">
-                  <img src="${qrDataUrl}" alt="QR Code" style="width: 150px; height: 150px;" />
-                </div>
-                <div class="session-info">
-                  ${new Date(session.test_date).toLocaleDateString("tr-TR")}
-                </div>
-              </div>
-            `
-              )
-              .join("")}
-          </div>
-        </body>
-      </html>
-    `;
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: [80, 80], // 20x20cm = 80x80mm (1cm = 4mm)
+      });
 
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.print();
+      const imgWidth = 80;
+      const imgHeight = 80;
+
+      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+      pdf.save(`${athleteData.first_name}_${athleteData.last_name}_QR.pdf`);
+    } catch (error) {
+      console.error("PDF oluşturulurken hata:", error);
+    }
   };
 
-  const downloadQRCodes = async () => {
-    const { default: JSZip } = await import("jszip");
-    const zipFile = new JSZip();
-
-    qrCodes.forEach(({ athlete, qrDataUrl }) => {
-      const base64Data = qrDataUrl.split(",")[1];
-      zipFile.file(
-        `${athlete.uuid}_${athlete.first_name}_${athlete.last_name}.png`,
-        base64Data,
-        { base64: true }
-      );
-    });
-
-    zipFile.generateAsync({ type: "blob" }).then((content: Blob) => {
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(content);
-      link.download = `${session.club?.name}_qr_kodlar.zip`;
-      link.click();
-    });
+  const handleBulkPrint = async () => {
+    // Bu fonksiyon kulüp için toplu yazdırma için kullanılacak
+    // Şimdilik tek sporcu için çalışıyor
+    handlePrint();
   };
+
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">
-            QR Kod Yazdırma - {session.club?.name}
-          </h2>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">QR Kod Yazdır</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-500 hover:text-gray-700"
           >
-            <X className="h-6 w-6" />
+            ✕
           </button>
         </div>
 
-        <div className="p-6">
-          {isGenerating ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">QR kodlar oluşturuluyor...</p>
+        <div className="space-y-4">
+          {/* Athlete Info */}
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h3 className="font-semibold text-gray-800 mb-2">
+              Sporcu Bilgileri
+            </h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="font-medium">Ad Soyad:</span>
+                <p>
+                  {athleteData.first_name} {athleteData.last_name}
+                </p>
+              </div>
+              <div>
+                <span className="font-medium">Doğum Tarihi:</span>
+                <p>{athleteData.birth_date}</p>
+              </div>
+              <div>
+                <span className="font-medium">Kulüp:</span>
+                <p>{athleteData.club_name}</p>
+              </div>
             </div>
-          ) : (
-            <>
-              {/* Kontroller */}
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center space-x-4">
-                  <div className="flex items-center space-x-2">
-                    <Users className="h-5 w-5 text-blue-600" />
-                    <span className="text-sm text-gray-600">
-                      {qrCodes.length} sporcu için QR kod hazır
-                    </span>
+          </div>
+
+          {/* QR Code Preview */}
+          <div className="text-center">
+            <h3 className="font-semibold text-gray-800 mb-4">
+              QR Kod Önizleme
+            </h3>
+            <div
+              ref={printRef}
+              className="inline-block p-4 border-2 border-gray-300 rounded-lg bg-white"
+              style={{ width: "200px", height: "200px" }}
+            >
+              {isGenerating ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                </div>
+              ) : qrCodeUrl ? (
+                <div className="text-center">
+                  <img
+                    src={qrCodeUrl}
+                    alt="QR Code"
+                    className="mx-auto mb-2"
+                    style={{ width: "120px", height: "120px" }}
+                  />
+                  <div className="text-xs text-gray-600">
+                    <p className="font-semibold">
+                      {athleteData.first_name} {athleteData.last_name}
+                    </p>
+                    <p>{athleteData.birth_date}</p>
                   </div>
                 </div>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={downloadQRCodes}
-                    className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center space-x-2"
-                  >
-                    <Download className="h-4 w-4" />
-                    <span>ZIP İndir</span>
-                  </button>
-                  <button
-                    onClick={printQRCodes}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
-                  >
-                    <Printer className="h-4 w-4" />
-                    <span>Yazdır</span>
-                  </button>
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  QR kod oluşturuluyor...
                 </div>
-              </div>
+              )}
+            </div>
+          </div>
 
-              {/* QR Kod Önizleme */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
-                {qrCodes.map(({ athlete, qrDataUrl }) => (
-                  <div
-                    key={athlete.id}
-                    className="border rounded-lg p-4 text-center"
-                  >
-                    <div className="font-medium text-sm mb-2">
-                      {athlete.first_name} {athlete.last_name}
-                    </div>
-                    <div className="text-xs text-gray-500 mb-2">
-                      {athlete.uuid}
-                    </div>
-                    <div className="flex justify-center">
-                      <Image
-                        src={qrDataUrl}
-                        alt="QR Code"
-                        width={80}
-                        height={80}
-                        className="w-20 h-20"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {/* Print Instructions */}
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="font-semibold text-blue-800 mb-2">
+              Yazdırma Talimatları
+            </h3>
+            <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
+              <li>QR kod 20x20cm boyutunda yazdırılacak</li>
+              <li>Yapışkanlı kağıt kullanın</li>
+              <li>QR kod sporcunun formasına yapıştırılacak</li>
+              <li>QR kodun altında sporcu adı ve doğum tarihi yazacak</li>
+            </ul>
+          </div>
 
-              {/* Yazdırma Talimatları */}
-              <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <h3 className="font-medium text-yellow-900 mb-2">
-                  Yazdırma Talimatları
-                </h3>
-                <ul className="text-sm text-yellow-800 space-y-1">
-                  <li>• QR kodları A4 kağıda yazdırın</li>
-                  <li>• Her sporcuya bir QR kod kartı verin</li>
-                  <li>• Kartları plastik koruyucu içine koyun</li>
-                  <li>
-                    • Test sırasında sporcular QR kodları yanlarında bulundursun
-                  </li>
-                </ul>
-              </div>
-            </>
-          )}
+          {/* Action Buttons */}
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              İptal
+            </button>
+            <button
+              onClick={handlePrint}
+              disabled={!qrCodeUrl || isGenerating}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isGenerating ? "Oluşturuluyor..." : "Yazdır"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
-}
+};
+
+export default QRPrintModal;

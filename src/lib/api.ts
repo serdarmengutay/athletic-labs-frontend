@@ -13,14 +13,18 @@ const api = axios.create({
 // Request interceptor - istek gönderilmeden önce
 api.interceptors.request.use(
   (config) => {
-    // Auth token'ı ekle
-    const token = localStorage.getItem("authToken");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Auth token'ı ekle (sadece browser'da)
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("authToken");
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
 
     console.log(`API İsteği: ${config.method?.toUpperCase()} ${config.url}`);
-    console.log("İstek verisi:", config.data);
+    if (config.data) {
+      console.log("İstek verisi:", config.data);
+    }
     return config;
   },
   (error) => {
@@ -33,14 +37,16 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     console.log(`API Yanıtı: ${response.status} ${response.config.url}`);
-    console.log("Yanıt verisi:", response.data);
+    if (response.data) {
+      console.log("Yanıt verisi:", response.data);
+    }
     return response;
   },
   (error) => {
     console.error("API Hatası:", error);
 
-    // 401 Unauthorized - token geçersiz
-    if (error.response?.status === 401) {
+    // 401 Unauthorized - token geçersiz (sadece browser'da)
+    if (error.response?.status === 401 && typeof window !== "undefined") {
       localStorage.removeItem("authToken");
       localStorage.removeItem("coachData");
       window.location.href = "/login";
@@ -57,10 +63,31 @@ api.interceptors.response.use(
 export const clubApi = {
   getAll: () => api.get("/clubs"),
   getById: (id: string) => api.get(`/clubs/${id}`),
-  create: (data: { name: string; city: string }) => api.post("/clubs", data),
-  update: (id: string, data: { name: string; city: string }) =>
-    api.put(`/clubs/${id}`, data),
+  create: (data: {
+    name: string;
+    city: string;
+    contact_person_name: string;
+    contact_person_phone: string;
+    contact_person_email: string;
+  }) => api.post("/clubs", data),
+  update: (
+    id: string,
+    data: {
+      name: string;
+      city: string;
+      contact_person_name: string;
+      contact_person_phone: string;
+      contact_person_email: string;
+    }
+  ) => api.put(`/clubs/${id}`, data),
   delete: (id: string) => api.delete(`/clubs/${id}`),
+  importAthletes: (clubId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post(`/clubs/${clubId}/import-athletes`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
 // Athlete API
@@ -179,6 +206,10 @@ export const qrApi = {
       session_id: sessionId,
       athlete_ids: athleteIds,
     }),
+  generatePrintData: (athleteId: string) =>
+    api.get(`/qr/print-data/${athleteId}`),
+  bulkGeneratePrintData: (clubId: string) =>
+    api.get(`/qr/bulk-print-data/${clubId}`),
 };
 
 // Authentication API
@@ -201,7 +232,7 @@ export const stationApi = {
   submitTest: (data: {
     athlete_id: string;
     station_id: string;
-    value: number;
+    values: Record<string, number>;
     session_id: string;
     notes?: string;
   }) => api.post("/station/test", data),
@@ -214,6 +245,11 @@ export const stationApi = {
   }) => api.post("/station/queue", data),
   getSessionStatus: (sessionId: string) =>
     api.get(`/station/sessions/${sessionId}/status`),
+  getStationData: (stationId: string) => api.get(`/station/${stationId}/data`),
+  getAthleteData: (athleteId: string, stationId: string) =>
+    api.get(`/station/athlete/${athleteId}/station/${stationId}`),
+  getActiveSession: (stationId: string) =>
+    api.get(`/station/${stationId}/active-session`),
 };
 
 export default api;
