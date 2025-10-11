@@ -2,9 +2,9 @@ export interface Club {
   id: string; // UUID formatında
   name: string;
   city: string;
-  contact_person_name: string;
-  contact_person_phone: string;
-  contact_person_email: string;
+  contact_person: string;
+  contact_phone: string;
+  contact_email: string;
   athlete_count: number;
   created_at: string;
   updated_at: string;
@@ -16,7 +16,6 @@ export interface Athlete {
   first_name: string;
   last_name: string;
   birth_year: number;
-  birth_date?: string; // Frontend için hesaplanacak
   height: number;
   weight: number;
   bmi: number;
@@ -69,7 +68,7 @@ export interface TestStation {
   icon: string;
 }
 
-// Hoca Rolleri
+// Antrenör Rolleri
 export interface Coach {
   id: string;
   name: string;

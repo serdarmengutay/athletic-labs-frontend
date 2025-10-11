@@ -234,7 +234,7 @@ const StationSelection: React.FC<StationSelectionProps> = ({ onBack }) => {
 
                   <div className="space-y-2 text-xs text-gray-500">
                     <div className="flex justify-between">
-                      <span>Gerekli Hoca:</span>
+                      <span>Gerekli Antrenör:</span>
                       <span className="font-medium">
                         {station.required_coaches} kişi
                       </span>

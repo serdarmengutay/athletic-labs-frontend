@@ -10,6 +10,7 @@ interface ExcelImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   clubId: string;
+  sessionId: string;
   onImportSuccess: (result: ExcelImportResult) => void;
 }
 
@@ -17,6 +18,7 @@ const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   isOpen,
   onClose,
   clubId,
+  sessionId,
   onImportSuccess,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -175,8 +177,7 @@ const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       console.log("Oluşturulan dosya:", newFile);
 
       // Backend'e gönder
-      // Mevcut clubApi.importAthletes kullan
-      const response = await clubApi.importAthletes(clubId, newFile);
+      const response = await clubApi.importAthletes(clubId, sessionId, newFile);
 
       const result: ExcelImportResult = {
         success: response.data.success,

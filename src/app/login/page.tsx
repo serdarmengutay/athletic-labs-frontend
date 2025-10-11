@@ -34,14 +34,14 @@ export default function LoginPage() {
         // Token'ı localStorage'a kaydet
         localStorage.setItem("authToken", response.data.data.token);
 
-        // Hoca bilgilerini kaydet
+        // Antrenör bilgilerini kaydet
         localStorage.setItem(
           "coachData",
           JSON.stringify(response.data.data.coach)
         );
 
         console.log("Token kaydedildi:", response.data.data.token);
-        console.log("Hoca bilgileri kaydedildi:", response.data.data.coach);
+        console.log("Antrenör bilgileri kaydedildi:", response.data.data.coach);
 
         // İstasyon sayfasına yönlendir
         const stationId =
@@ -85,7 +85,7 @@ export default function LoginPage() {
             <User className="h-6 w-6 text-white" />
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Hoca Girişi
+            Antrenör Girişi
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             İstasyon paneline erişmek için giriş yapın
@@ -115,7 +115,7 @@ export default function LoginPage() {
                     setFormData((prev) => ({ ...prev, email: e.target.value }))
                   }
                   className="appearance-none relative block w-full pl-10 pr-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="hoca@example.com"
+                  placeholder="Antrenör@example.com"
                 />
               </div>
             </div>

@@ -131,7 +131,7 @@ export default function CoachPanel() {
               </button>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  Hoca Paneli
+                  Antrenör Paneli
                 </h1>
                 <p className="text-gray-600">
                   {currentCoach?.name} - {currentStation?.name}
@@ -271,10 +271,10 @@ export default function CoachPanel() {
 
           {/* Sağ Panel - Geçmiş ve İstatistikler */}
           <div className="space-y-6">
-            {/* Hoca Bilgileri */}
+            {/* Antrenör Bilgileri */}
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Hoca Bilgileri
+                Antrenör Bilgileri
               </h2>
               <div className="space-y-3">
                 <div className="flex items-center space-x-3">

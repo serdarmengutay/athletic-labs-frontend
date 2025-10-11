@@ -66,25 +66,27 @@ export const clubApi = {
   create: (data: {
     name: string;
     city: string;
-    contact_person_name: string;
-    contact_person_phone: string;
-    contact_person_email: string;
+    contact_person: string;
+    contact_phone: string;
+    contact_email: string;
   }) => api.post("/clubs", data),
   update: (
     id: string,
     data: {
       name: string;
       city: string;
-      contact_person_name: string;
-      contact_person_phone: string;
-      contact_person_email: string;
+      contact_person: string;
+      contact_phone: string;
+      contact_email: string;
     }
   ) => api.put(`/clubs/${id}`, data),
   delete: (id: string) => api.delete(`/clubs/${id}`),
-  importAthletes: (clubId: string, file: File) => {
+  importAthletes: (clubId: string, sessionId: string, file: File) => {
     const formData = new FormData();
-    formData.append("file", file);
-    return api.post(`/clubs/${clubId}/import-athletes`, formData, {
+    formData.append("excelFile", file);
+    formData.append("clubId", clubId);
+    formData.append("sessionId", sessionId);
+    return api.post("/excel/import-athletes", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
@@ -99,7 +101,7 @@ export const athleteApi = {
   create: (data: {
     first_name: string;
     last_name: string;
-    birth_date: string;
+    birth_year: number;
     height: number;
     weight: number;
     club_id: string; // UUID formatında
@@ -109,7 +111,7 @@ export const athleteApi = {
     data: {
       first_name: string;
       last_name: string;
-      birth_date: string;
+      birth_year: number;
       height: number;
       weight: number;
       club_id: string; // UUID formatında

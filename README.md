@@ -9,7 +9,7 @@ Modern sporcu performans takip sistemi - QR kod tabanlı test yönetimi ve real-
 - **Kulüp ve Sporcu Yönetimi** - Excel/CSV ile toplu sporcu import
 - **QR Kod Sistemi** - Gerçek kamera ile QR kod tarama
 - **Test İstasyonları** - 5 farklı test istasyonu (FFMI, Sprint, Çeviklik, vb.)
-- **Hoca Paneli** - İstasyon bazlı değer girişi
+- **Antrenör Paneli** - İstasyon bazlı değer girişi
 - **Real-time Dashboard** - Canlı test takibi
 
 ### Teknik Özellikler
@@ -18,7 +18,7 @@ Modern sporcu performans takip sistemi - QR kod tabanlı test yönetimi ve real-
 - **TypeScript** - Tip güvenliği
 - **Tailwind CSS** - Responsive tasarım
 - **QR Code Scanner** - Gerçek kamera entegrasyonu
-- **JWT Authentication** - Güvenli hoca girişi
+- **JWT Authentication** - Güvenli Antrenör girişi
 - **Mobile-First** - Tablet ve telefon uyumlu
 
 ## 🚀 Kurulum
@@ -41,11 +41,11 @@ npm run dev
 - Kulüp seçin
 - Sporcu listesini Excel/CSV ile import edin
 - QR kodları oluşturun ve yazdırın
-- Hocaları istasyonlara atayın
+- Antrenörları istasyonlara atayın
 
 ### 2. Saha Uygulaması
 
-- Hocalar `/login` ile giriş yapar
+- Antrenörlar `/login` ile giriş yapar
 - İstasyon sayfasında QR kodları tarar
 - Test değerlerini girer
 - Otomatik sıra takibi
@@ -60,8 +60,8 @@ npm run dev
 
 ### Authentication
 
-- `POST /auth/coach/login` - Hoca girişi
-- `GET /auth/coach/profile` - Hoca profili
+- `POST /auth/coach/login` - Antrenör girişi
+- `GET /auth/coach/profile` - Antrenör profili
 
 ### QR Management
 

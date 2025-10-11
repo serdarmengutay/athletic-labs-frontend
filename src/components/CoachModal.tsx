@@ -45,7 +45,7 @@ export default function CoachModal({
 
       onSuccess(newCoach);
     } catch (error) {
-      console.error("Hoca eklenirken hata:", error);
+      console.error("Antrenör eklenirken hata:", error);
     } finally {
       setLoading(false);
     }
@@ -78,7 +78,7 @@ export default function CoachModal({
       case "supervisor":
         return "Saha Sorumlusu";
       default:
-        return "İstasyon Hocası";
+        return "İstasyon Antrenörsı";
     }
   };
 
@@ -87,7 +87,7 @@ export default function CoachModal({
       <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-semibold text-gray-900">
-            {coach ? "Hoca Düzenle" : "Yeni Hoca Ekle"}
+            {coach ? "Antrenör Düzenle" : "Yeni Antrenör Ekle"}
           </h2>
           <button
             onClick={onClose}
@@ -118,7 +118,7 @@ export default function CoachModal({
                     setFormData((prev) => ({ ...prev, name: e.target.value }))
                   }
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Hoca adı soyadı"
+                  placeholder="Antrenör adı soyadı"
                 />
               </div>
             </div>
@@ -137,7 +137,7 @@ export default function CoachModal({
                     setFormData((prev) => ({ ...prev, email: e.target.value }))
                   }
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="hoca@example.com"
+                  placeholder="Antrenör@example.com"
                 />
               </div>
             </div>
@@ -159,7 +159,7 @@ export default function CoachModal({
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="station_coach">İstasyon Hocası</option>
+                <option value="station_coach">İstasyon Antrenörsı</option>
                 <option value="supervisor">Saha Sorumlusu</option>
                 <option value="admin">Yönetici</option>
               </select>
@@ -192,7 +192,7 @@ export default function CoachModal({
                         {station.description}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {station.required_coaches} hoca gerekli
+                        {station.required_coaches} Antrenör gerekli
                       </p>
                     </div>
                     <div

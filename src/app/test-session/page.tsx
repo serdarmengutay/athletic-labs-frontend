@@ -11,11 +11,25 @@ import {
   QrCode,
   Settings,
   UserPlus,
+  FileText,
+  Trophy,
+  ArrowRight,
+  ArrowLeft,
+  Calendar,
+  Phone,
+  Mail,
+  Upload,
+  Download,
+  Printer,
+  Eye,
+  Edit,
+  Trash2,
 } from "lucide-react";
 import { Club, Athlete, Coach, AdvancedTestSession } from "@/types";
 import BulkQRPrintModal from "@/components/BulkQRPrintModal";
+import ExcelImportModal from "@/components/ExcelImportModal";
 import { TEST_STATIONS } from "@/lib/testStations";
-import { clubApi, athleteApi } from "@/lib/api";
+import { clubApi, athleteApi, testApi } from "@/lib/api";
 import CoachModal from "@/components/CoachModal";
 import AthleteImportModal from "@/components/AthleteImportModal";
 import QRPrintModal from "@/components/QRPrintModal";
@@ -36,6 +50,14 @@ export default function TestSessionPage() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [selectedClubForImport, setSelectedClubForImport] =
     useState<Club | null>(null);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [sessionData, setSessionData] = useState({
+    test_date: "",
+    notes: "",
+    contact_person_name: "",
+    contact_person_phone: "",
+    contact_person_email: "",
+  });
 
   useEffect(() => {
     fetchData();
@@ -104,31 +126,66 @@ export default function TestSessionPage() {
     );
   };
 
-  const startTestSession = () => {
+  const startTestSession = async () => {
     if (
       !selectedClub ||
       selectedAthletes.length === 0 ||
-      selectedCoaches.length === 0
+      !sessionData.test_date ||
+      !sessionData.contact_person_name ||
+      !sessionData.contact_person_phone
     ) {
-      alert("Lütfen kulüp, sporcu ve hoca seçiniz!");
+      alert("Lütfen tüm gerekli bilgileri doldurunuz!");
       return;
     }
 
-    const newSession: AdvancedTestSession = {
-      id: `session-${Date.now()}`,
-      club_id: selectedClub.id,
-      test_date: new Date().toISOString(),
-      status: "preparing",
-      stations: TEST_STATIONS,
-      coaches: selectedCoaches,
-      athletes: selectedAthletes,
-      session_statuses: [],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      club: selectedClub,
-    };
+    try {
+      setLoading(true);
 
-    setCurrentSession(newSession);
+      // Backend'e test oturumu oluşturma isteği gönder
+      const sessionResponse = await testApi.createSession({
+        club_id: selectedClub.id,
+        test_date: sessionData.test_date,
+        notes:
+          sessionData.notes ||
+          `İletişim: ${sessionData.contact_person_name} - ${
+            sessionData.contact_person_phone
+          }${
+            sessionData.contact_person_email
+              ? ` - ${sessionData.contact_person_email}`
+              : ""
+          }`,
+      });
+
+      const createdSession = sessionResponse.data.data;
+
+      // Frontend state'ini güncelle
+      const newSession: AdvancedTestSession = {
+        id: createdSession.id,
+        club_id: selectedClub.id,
+        test_date: sessionData.test_date,
+        notes: sessionData.notes,
+        status: "preparing",
+        stations: TEST_STATIONS,
+        coaches: [], // Antrenörler test günü sahada belirlenecek
+        athletes: selectedAthletes,
+        session_statuses: [],
+        created_at: createdSession.created_at,
+        updated_at: createdSession.updated_at,
+        club: selectedClub,
+      };
+
+      setCurrentSession(newSession);
+
+      // Başarı mesajı
+      alert("Test oturumu başarıyla oluşturuldu!");
+    } catch (error) {
+      console.error("Test oturumu oluşturulurken hata:", error);
+      alert(
+        "Test oturumu oluşturulurken bir hata oluştu. Lütfen tekrar deneyin."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const activateSession = () => {
@@ -177,6 +234,25 @@ export default function TestSessionPage() {
     }
   };
 
+  const handleNextStep = () => {
+    if (currentStep < 4) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const handlePrevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleSessionDataChange = (field: string, value: string) => {
+    setSessionData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -186,180 +262,443 @@ export default function TestSessionPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                Test Oturumu Yönetimi
+                Test Oturumu Oluştur
               </h1>
-              <p className="text-gray-600">Saha test süreçlerini yönetin</p>
+              <p className="text-gray-600">
+                Yeni test oturumu için adım adım rehber
+              </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={() => setShowCoachModal(true)}
-                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center justify-center space-x-2 text-sm sm:text-base"
-              >
-                <UserPlus className="h-4 w-4" />
-                <span>Hoca Ekle</span>
-              </button>
-              <button
-                onClick={() => router.back()}
-                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center justify-center space-x-2 text-sm sm:text-base"
-              >
-                <Settings className="h-4 w-4" />
-                <span>Geri</span>
-              </button>
-            </div>
+            <button
+              onClick={() => router.back()}
+              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center space-x-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Geri</span>
+            </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {!currentSession ? (
-          /* Test Oturumu Hazırlığı */
+          /* Test Oturumu Hazırlığı - Adım Adım Rehber */
           <div className="space-y-8">
-            {/* Kulüp Seçimi */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  1. Kulüp Seçimi
+            {/* Adım Göstergesi */}
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Test Oturumu Oluşturma Rehberi
                 </h2>
-                {selectedClub && (
-                  <button
-                    onClick={() => {
-                      setSelectedClubForImport(selectedClub);
-                      setShowImportModal(true);
-                    }}
-                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2"
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    <span>Sporcu İçe Aktar</span>
-                  </button>
-                )}
+                <div className="text-sm text-gray-600">
+                  Adım {currentStep} / 4
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                {clubs.map((club) => (
-                  <div
-                    key={club.id}
-                    onClick={() => handleClubSelect(club)}
-                    className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                      selectedClub?.id === club.id
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-gray-200 hover:border-gray-300"
+
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${(currentStep / 4) * 100}%` }}
+                ></div>
+              </div>
+
+              {/* Adım Butonları */}
+              <div className="flex justify-between">
+                {[1, 2, 3, 4].map((step) => (
+                  <button
+                    key={step}
+                    onClick={() => setCurrentStep(step)}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                      currentStep === step
+                        ? "bg-blue-600 text-white"
+                        : currentStep > step
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-100 text-gray-600"
                     }`}
                   >
-                    <h3 className="font-medium text-gray-900">{club.name}</h3>
-                    <p className="text-sm text-gray-600">{club.city}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {athletes.filter((a) => a.club_id === club.id).length}{" "}
-                      sporcu
-                    </p>
-                  </div>
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold ${
+                        currentStep === step
+                          ? "bg-white text-blue-600"
+                          : currentStep > step
+                          ? "bg-green-600 text-white"
+                          : "bg-gray-400 text-white"
+                      }`}
+                    >
+                      {currentStep > step ? (
+                        <CheckCircle className="h-4 w-4" />
+                      ) : (
+                        step
+                      )}
+                    </div>
+                    <span className="text-sm font-medium">
+                      {step === 1 && "Kulüp Seçimi"}
+                      {step === 2 && "Test Bilgileri"}
+                      {step === 3 && "Sporcu Import"}
+                      {step === 4 && "QR Kodlar"}
+                    </span>
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* Sporcu Seçimi */}
-            {selectedClub && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  2. Sporcu Seçimi ({selectedAthletes.length} seçildi)
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {athletes
-                    .filter((athlete) => athlete.club_id === selectedClub.id)
-                    .map((athlete) => (
-                      <div
-                        key={athlete.id}
-                        onClick={() => handleAthleteToggle(athlete)}
-                        className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                          selectedAthletes.find((a) => a.id === athlete.id)
-                            ? "border-green-500 bg-green-50"
-                            : "border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="font-medium text-gray-900">
-                              {athlete.first_name} {athlete.last_name}
-                            </h4>
-                            <p className="text-sm text-gray-600">
-                              {athlete.athlete_code}
-                            </p>
-                          </div>
-                          {selectedAthletes.find(
-                            (a) => a.id === athlete.id
-                          ) && (
-                            <CheckCircle className="h-5 w-5 text-green-500" />
-                          )}
-                        </div>
-                      </div>
-                    ))}
+            {/* Adım 1: Kulüp Seçimi */}
+            {currentStep === 1 && (
+              <div className="bg-white rounded-xl shadow-lg p-8">
+                <div className="text-center mb-8">
+                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Trophy className="h-8 w-8 text-blue-600" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                    1. Kulüp Seçimi
+                  </h3>
+                  <p className="text-gray-600">Test yapılacak kulübü seçin</p>
                 </div>
-              </div>
-            )}
 
-            {/* Hoca Seçimi */}
-            {selectedClub && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  3. Hoca Seçimi ({selectedCoaches.length} seçildi)
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                  {coaches.map((coach) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {clubs.map((club) => (
                     <div
-                      key={coach.id}
-                      onClick={() => handleCoachToggle(coach)}
-                      className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                        selectedCoaches.find((c) => c.id === coach.id)
-                          ? "border-purple-500 bg-purple-50"
+                      key={club.id}
+                      onClick={() => handleClubSelect(club)}
+                      className={`p-6 border-2 rounded-xl cursor-pointer transition-all duration-200 hover:shadow-lg ${
+                        selectedClub?.id === club.id
+                          ? "border-blue-500 bg-blue-50 shadow-lg"
                           : "border-gray-200 hover:border-gray-300"
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-medium text-gray-900">
-                            {coach.name}
-                          </h4>
-                          <p className="text-sm text-gray-600">{coach.email}</p>
-                          <p className="text-xs text-gray-500">
-                            {coach.role === "admin"
-                              ? "Yönetici"
-                              : coach.role === "supervisor"
-                              ? "Saha Sorumlusu"
-                              : "İstasyon Hocası"}
-                          </p>
+                      <div className="text-center">
+                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <Trophy className="h-6 w-6 text-blue-600" />
                         </div>
-                        {selectedCoaches.find((c) => c.id === coach.id) && (
-                          <CheckCircle className="h-5 w-5 text-purple-500" />
-                        )}
+                        <h4 className="text-lg font-semibold text-gray-900 mb-1">
+                          {club.name}
+                        </h4>
+                        <p className="text-sm text-gray-600 mb-2">
+                          {club.city}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {athletes.filter((a) => a.club_id === club.id).length}{" "}
+                          sporcu
+                        </p>
                       </div>
                     </div>
                   ))}
                 </div>
+
+                {selectedClub && (
+                  <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        <div>
+                          <p className="font-medium text-green-900">
+                            {selectedClub.name} seçildi
+                          </p>
+                          <p className="text-sm text-green-700">
+                            {
+                              athletes.filter(
+                                (a) => a.club_id === selectedClub.id
+                              ).length
+                            }{" "}
+                            sporcu mevcut
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleNextStep}
+                        className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                      >
+                        <span>Devam Et</span>
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Test Oturumu Başlatma */}
-            {selectedClub &&
-              selectedAthletes.length > 0 &&
-              selectedCoaches.length > 0 && (
-                <div className="bg-white rounded-lg shadow p-6">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                    4. Test Oturumu Başlat
-                  </h2>
-                  <div className="bg-blue-50 p-4 rounded-lg mb-4">
-                    <h3 className="font-medium text-blue-900 mb-2">
+            {/* Adım 2: Test Bilgileri */}
+            {currentStep === 2 && (
+              <div className="bg-white rounded-xl shadow-lg p-8">
+                <div className="text-center mb-8">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Calendar className="h-8 w-8 text-green-600" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                    2. Test Bilgileri
+                  </h3>
+                  <p className="text-gray-600">
+                    Test tarihi ve iletişim bilgilerini girin
+                  </p>
+                </div>
+
+                <div className="max-w-2xl mx-auto space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Test Tarihi *
+                    </label>
+                    <input
+                      type="date"
+                      value={sessionData.test_date}
+                      onChange={(e) =>
+                        handleSessionDataChange("test_date", e.target.value)
+                      }
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      İletişim Kişisi *
+                    </label>
+                    <input
+                      type="text"
+                      value={sessionData.contact_person_name}
+                      onChange={(e) =>
+                        handleSessionDataChange(
+                          "contact_person_name",
+                          e.target.value
+                        )
+                      }
+                      placeholder="Kulüp başkanı veya sorumlu kişi"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      İletişim Telefonu *
+                    </label>
+                    <input
+                      type="tel"
+                      value={sessionData.contact_person_phone}
+                      onChange={(e) =>
+                        handleSessionDataChange(
+                          "contact_person_phone",
+                          e.target.value
+                        )
+                      }
+                      placeholder="+90 5XX XXX XX XX"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      İletişim E-postası
+                    </label>
+                    <input
+                      type="email"
+                      value={sessionData.contact_person_email}
+                      onChange={(e) =>
+                        handleSessionDataChange(
+                          "contact_person_email",
+                          e.target.value
+                        )
+                      }
+                      placeholder="ornek@kulup.com"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Notlar
+                    </label>
+                    <textarea
+                      value={sessionData.notes}
+                      onChange={(e) =>
+                        handleSessionDataChange("notes", e.target.value)
+                      }
+                      placeholder="Test hakkında özel notlar..."
+                      rows={3}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-between mt-8">
+                  <button
+                    onClick={handlePrevStep}
+                    className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 flex items-center space-x-2"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    <span>Geri</span>
+                  </button>
+                  <button
+                    onClick={handleNextStep}
+                    disabled={
+                      !sessionData.test_date ||
+                      !sessionData.contact_person_name ||
+                      !sessionData.contact_person_phone
+                    }
+                    className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 flex items-center space-x-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  >
+                    <span>Devam Et</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Adım 3: Sporcu Import */}
+            {currentStep === 3 && (
+              <div className="bg-white rounded-xl shadow-lg p-8">
+                <div className="text-center mb-8">
+                  <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FileText className="h-8 w-8 text-purple-600" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                    3. Sporcu Verilerini İçe Aktar
+                  </h3>
+                  <p className="text-gray-600">
+                    Excel dosyasından sporcu verilerini yükleyin
+                  </p>
+                </div>
+
+                <div className="max-w-2xl mx-auto">
+                  <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-purple-400 transition-colors">
+                    <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                      Excel Dosyası Yükleyin
+                    </h4>
+                    <p className="text-gray-600 mb-4">
+                      Sporcu adı, soyadı, doğum tarihi ve veli telefon numarası
+                      içeren Excel dosyası
+                    </p>
+                    <button
+                      onClick={async () => {
+                        if (!selectedClub) {
+                          alert("Lütfen önce bir kulüp seçin!");
+                          return;
+                        }
+
+                        try {
+                          // Geçici test session oluştur
+                          const tempSessionResponse =
+                            await testApi.createSession({
+                              club_id: selectedClub.id,
+                              test_date: new Date().toISOString().split("T")[0],
+                              notes: "Geçici session - Sporcu import için",
+                            });
+
+                          const tempSession = tempSessionResponse.data.data;
+
+                          setCurrentSession({
+                            id: tempSession.id,
+                            club_id: selectedClub.id,
+                            test_date: tempSession.test_date,
+                            notes: tempSession.notes,
+                            status: "preparing",
+                            stations: TEST_STATIONS,
+                            coaches: [],
+                            athletes: [],
+                            session_statuses: [],
+                            created_at: tempSession.created_at,
+                            updated_at: tempSession.updated_at,
+                            club: selectedClub,
+                          });
+
+                          setSelectedClubForImport(selectedClub);
+                          setShowImportModal(true);
+                        } catch (error) {
+                          console.error(
+                            "Geçici session oluşturulurken hata:",
+                            error
+                          );
+                          alert(
+                            "Geçici session oluşturulurken hata oluştu. Lütfen tekrar deneyin."
+                          );
+                        }
+                      }}
+                      className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 flex items-center space-x-2 mx-auto"
+                    >
+                      <FileText className="h-5 w-5" />
+                      <span>Dosya Seç</span>
+                    </button>
+                  </div>
+
+                  {selectedAthletes.length > 0 && (
+                    <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <div>
+                            <p className="font-medium text-green-900">
+                              {selectedAthletes.length} sporcu yüklendi
+                            </p>
+                            <p className="text-sm text-green-700">
+                              QR kodları oluşturulmaya hazır
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={handleNextStep}
+                          className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                        >
+                          <span>Devam Et</span>
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-between mt-8">
+                  <button
+                    onClick={handlePrevStep}
+                    className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 flex items-center space-x-2"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    <span>Geri</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Adım 4: QR Kodlar */}
+            {currentStep === 4 && (
+              <div className="bg-white rounded-xl shadow-lg p-8">
+                <div className="text-center mb-8">
+                  <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <QrCode className="h-8 w-8 text-orange-600" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                    4. QR Kodları Oluştur ve Yazdır
+                  </h3>
+                  <p className="text-gray-600">
+                    Sporcular için QR kodları oluşturun ve yazdırın
+                  </p>
+                </div>
+
+                <div className="max-w-2xl mx-auto space-y-6">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                    <h4 className="font-semibold text-blue-900 mb-2">
                       Test Oturumu Özeti
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-sm">
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-blue-700">Kulüp:</span>
                         <p className="font-medium text-blue-900">
-                          {selectedClub.name}
+                          {selectedClub?.name}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-blue-700">Test Tarihi:</span>
+                        <p className="font-medium text-blue-900">
+                          {new Date(sessionData.test_date).toLocaleDateString(
+                            "tr-TR"
+                          )}
                         </p>
                       </div>
                       <div>
@@ -369,178 +708,120 @@ export default function TestSessionPage() {
                         </p>
                       </div>
                       <div>
-                        <span className="text-blue-700">Hoca Sayısı:</span>
+                        <span className="text-blue-700">İletişim:</span>
                         <p className="font-medium text-blue-900">
-                          {selectedCoaches.length}
+                          {sessionData.contact_person_name}
                         </p>
                       </div>
                     </div>
                   </div>
-                  <div className="space-y-3">
-                    <button
-                      onClick={startTestSession}
-                      className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 flex items-center justify-center space-x-2"
-                    >
-                      <Play className="h-5 w-5" />
-                      <span>Test Oturumunu Başlat</span>
-                    </button>
+
+                  <div className="space-y-4">
                     <button
                       onClick={() => setShowQRModal(true)}
-                      className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 flex items-center justify-center space-x-2"
+                      className="w-full bg-orange-600 text-white px-6 py-4 rounded-lg hover:bg-orange-700 flex items-center justify-center space-x-3 text-lg font-semibold"
                     >
-                      <QrCode className="h-5 w-5" />
-                      <span>QR Kodlarını Yazdır</span>
+                      <QrCode className="h-6 w-6" />
+                      <span>QR Kodları Oluştur</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowQRModal(true)}
+                      className="w-full bg-blue-600 text-white px-6 py-4 rounded-lg hover:bg-blue-700 flex items-center justify-center space-x-3 text-lg font-semibold"
+                    >
+                      <Printer className="h-6 w-6" />
+                      <span>QR Kodları Yazdır</span>
                     </button>
                   </div>
                 </div>
-              )}
+
+                <div className="flex justify-between mt-8">
+                  <button
+                    onClick={handlePrevStep}
+                    className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 flex items-center space-x-2"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    <span>Geri</span>
+                  </button>
+                  <button
+                    onClick={startTestSession}
+                    className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 flex items-center space-x-2 text-lg font-semibold"
+                  >
+                    <Play className="h-5 w-5" />
+                    <span>Test Oturumunu Başlat</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
-          /* Aktif Test Oturumu */
-          <div className="space-y-6">
+          /* Aktif Test Oturumu - Sadeleştirilmiş */
+          <div className="space-y-8">
             {/* Oturum Durumu */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900">
-                    Test Oturumu - {currentSession.club?.name}
-                  </h2>
-                  <p className="text-gray-600">
-                    {new Date(currentSession.test_date).toLocaleDateString(
-                      "tr-TR"
-                    )}
-                  </p>
+            <div className="bg-white rounded-xl shadow-lg p-8">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="h-8 w-8 text-green-600" />
                 </div>
-                <div className="flex items-center space-x-3">
-                  <span
-                    className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
-                      currentSession.status
-                    )}`}
-                  >
-                    {getStatusText(currentSession.status)}
-                  </span>
-                  {currentSession.status === "preparing" && (
-                    <button
-                      onClick={activateSession}
-                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2"
-                    >
-                      <Play className="h-4 w-4" />
-                      <span>Aktifleştir</span>
-                    </button>
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                  Test Oturumu Hazır!
+                </h2>
+                <p className="text-lg text-gray-600">
+                  {currentSession.club?.name} -{" "}
+                  {new Date(currentSession.test_date).toLocaleDateString(
+                    "tr-TR"
                   )}
-                  {currentSession.status === "active" && (
-                    <button
-                      onClick={completeSession}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
-                    >
-                      <CheckCircle className="h-4 w-4" />
-                      <span>Tamamla</span>
-                    </button>
-                  )}
-                </div>
+                </p>
               </div>
 
               {/* İstatistikler */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center space-x-2">
-                    <Users className="h-5 w-5 text-blue-600" />
-                    <span className="text-sm font-medium text-gray-700">
-                      Sporcular
-                    </span>
-                  </div>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="bg-blue-50 rounded-xl p-6 text-center">
+                  <Users className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-blue-900">
                     {currentSession.athletes.length}
                   </p>
+                  <p className="text-sm text-blue-700">Sporcu</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center space-x-2">
-                    <MapPin className="h-5 w-5 text-green-600" />
-                    <span className="text-sm font-medium text-gray-700">
-                      İstasyonlar
-                    </span>
-                  </div>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                <div className="bg-green-50 rounded-xl p-6 text-center">
+                  <MapPin className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-green-900">
                     {currentSession.stations.length}
                   </p>
+                  <p className="text-sm text-green-700">İstasyon</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center space-x-2">
-                    <Clock className="h-5 w-5 text-yellow-600" />
-                    <span className="text-sm font-medium text-gray-700">
-                      Hocalar
-                    </span>
-                  </div>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                <div className="bg-purple-50 rounded-xl p-6 text-center">
+                  <Clock className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-purple-900">
                     {currentSession.coaches.length}
                   </p>
+                  <p className="text-sm text-purple-700">Antrenör</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center space-x-2">
-                    <QrCode className="h-5 w-5 text-purple-600" />
-                    <span className="text-sm font-medium text-gray-700">
-                      QR Kodlar
-                    </span>
-                  </div>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                <div className="bg-orange-50 rounded-xl p-6 text-center">
+                  <QrCode className="h-8 w-8 text-orange-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-orange-900">
                     {currentSession.athletes.length}
                   </p>
+                  <p className="text-sm text-orange-700">QR Kod</p>
                 </div>
               </div>
-            </div>
 
-            {/* İstasyonlar */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Test İstasyonları
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                {currentSession.stations.map((station) => (
-                  <div key={station.id} className="border rounded-lg p-4">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <span className="text-2xl">{station.icon}</span>
-                      <div>
-                        <h4 className="font-medium text-gray-900">
-                          {station.name}
-                        </h4>
-                        <p className="text-sm text-gray-600">
-                          {station.description}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {station.required_coaches} hoca gerekli • {station.unit}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Sporcu Listesi */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Sporcu Listesi
-              </h3>
-              <div className="space-y-2">
-                {currentSession.athletes.map((athlete) => (
-                  <div
-                    key={athlete.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                  >
-                    <div>
-                      <h4 className="font-medium text-gray-900">
-                        {athlete.first_name} {athlete.last_name}
-                      </h4>
-                      <p className="text-sm text-gray-600">
-                        {athlete.athlete_code}
-                      </p>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <QrCode className="h-5 w-5 text-gray-400" />
-                      <span className="text-sm text-gray-500">QR Kod</span>
-                    </div>
-                  </div>
-                ))}
+              {/* Hızlı Erişim */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <button
+                  onClick={() => router.push("/station")}
+                  className="bg-blue-600 text-white px-6 py-4 rounded-xl hover:bg-blue-700 flex items-center justify-center space-x-3 text-lg font-semibold"
+                >
+                  <MapPin className="h-6 w-6" />
+                  <span>İstasyon Yönetimi</span>
+                </button>
+                <button
+                  onClick={() => setShowQRModal(true)}
+                  className="bg-green-600 text-white px-6 py-4 rounded-xl hover:bg-green-700 flex items-center justify-center space-x-3 text-lg font-semibold"
+                >
+                  <Printer className="h-6 w-6" />
+                  <span>QR Kodları Yazdır</span>
+                </button>
               </div>
             </div>
           </div>
@@ -558,47 +839,58 @@ export default function TestSessionPage() {
         />
       )}
 
-      {/* Athlete Import Modal */}
-      {showImportModal && selectedClubForImport && (
-        <AthleteImportModal
+      {/* Excel Import Modal */}
+      {showImportModal && selectedClubForImport && currentSession && (
+        <ExcelImportModal
+          isOpen={showImportModal}
           onClose={() => {
             setShowImportModal(false);
             setSelectedClubForImport(null);
           }}
-          onSuccess={(importedAthletes) => {
-            // Convert ImportedAthlete to Athlete format
-            const convertedAthletes: Athlete[] = importedAthletes.map(
-              (athlete, index) => ({
-                id: `imported-${Date.now()}-${index}`,
-                athlete_code: `IMP${String(index + 1).padStart(3, "0")}`,
-                first_name: athlete.first_name,
-                last_name: athlete.last_name,
-                birth_year: new Date(athlete.birth_date).getFullYear(),
-                birth_date: athlete.birth_date,
-                height: athlete.height || 0,
-                weight: athlete.weight || 0,
-                bmi:
-                  athlete.height && athlete.weight
-                    ? athlete.weight / Math.pow(athlete.height / 100, 2)
-                    : 0,
-                club_id: selectedClubForImport?.id || "",
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              })
-            );
+          clubId={selectedClubForImport.id}
+          sessionId={currentSession.id}
+          onImportSuccess={async (result) => {
+            try {
+              setLoading(true);
+              console.log("Import sonucu:", result);
 
-            setAthletes((prev) => [...prev, ...convertedAthletes]);
-            setShowImportModal(false);
-            setSelectedClubForImport(null);
-            // Refresh selected athletes
-            if (selectedClub) {
-              const clubAthletes = [...athletes, ...convertedAthletes].filter(
-                (athlete) => athlete.club_id === selectedClub.id
-              );
-              setSelectedAthletes(clubAthletes);
+              if (result.success && result.athletes) {
+                // Import edilen sporcuları state'e ekle
+                const importedAthletes = result.athletes.map(
+                  (athlete: any) => ({
+                    id: athlete.id,
+                    athlete_code: athlete.athlete_code,
+                    first_name: athlete.name.split(" ")[0],
+                    last_name: athlete.name.split(" ").slice(1).join(" "),
+                    birth_year: athlete.birth_year,
+                    height: 0,
+                    weight: 0,
+                    bmi: 0,
+                    club_id: selectedClubForImport.id,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    club: selectedClubForImport,
+                  })
+                );
+
+                setAthletes((prev) => [...prev, ...importedAthletes]);
+                setSelectedAthletes((prev) => [...prev, ...importedAthletes]);
+                setShowImportModal(false);
+                setSelectedClubForImport(null);
+
+                alert(
+                  `${result.imported_count} sporcu başarıyla import edildi!`
+                );
+              } else {
+                alert("Sporcu import işlemi başarısız oldu.");
+              }
+            } catch (error) {
+              console.error("Import sonrası hata:", error);
+              alert("Sporcu verileri işlenirken bir hata oluştu.");
+            } finally {
+              setLoading(false);
             }
           }}
-          club={selectedClubForImport}
         />
       )}
 

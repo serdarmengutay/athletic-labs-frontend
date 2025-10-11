@@ -22,13 +22,15 @@ export default function StationPage() {
   const [currentAthlete, setCurrentAthlete] = useState<Athlete | null>(null);
   const [testValue, setTestValue] = useState<string>("");
   const [showQRScanner, setShowQRScanner] = useState(false);
-  const [recentTests, setRecentTests] = useState<Array<{
-    id: string;
-    athlete: Athlete;
-    station: TestStation;
-    value: number;
-    timestamp: string;
-  }>>([]);
+  const [recentTests, setRecentTests] = useState<
+    Array<{
+      id: string;
+      athlete: Athlete;
+      station: TestStation;
+      value: number;
+      timestamp: string;
+    }>
+  >([]);
   const [stationQueue, setStationQueue] = useState<Athlete[]>([]);
   const [currentSession, setCurrentSession] = useState<{
     id: string;
@@ -38,13 +40,13 @@ export default function StationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 
-  // Hoca girişi ve istasyon yükleme
+  // Antrenör girişi ve istasyon yükleme
   useEffect(() => {
     const initializeStation = async () => {
       try {
         setLoading(true);
 
-        // Hoca profilini al
+        // Antrenör profilini al
         const profileResponse = await authApi.getProfile();
         setCurrentCoach(profileResponse.data.data);
 
@@ -125,7 +127,7 @@ export default function StationPage() {
       await stationApi.submitTest({
         athlete_id: currentAthlete.id,
         station_id: currentStation.id,
-        value: parseFloat(testValue),
+        values: { [currentStation.id]: parseFloat(testValue) },
         session_id: currentSession.id,
       });
 
@@ -193,78 +195,91 @@ export default function StationPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-4 py-4">
+      <header className="bg-white shadow-lg border-b">
+        <div className="max-w-6xl mx-auto px-4 py-6">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-4">
-              <div className="text-2xl">{currentStation?.icon}</div>
+              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-2xl">{currentStation?.icon}</span>
+              </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">
+                <h1 className="text-2xl font-bold text-gray-900">
                   {currentStation?.name} İstasyonu
                 </h1>
-                <p className="text-sm text-gray-600">
+                <p className="text-gray-600">
                   {currentCoach?.name} • {stationQueue.length} sporcu sırada
                 </p>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="text-gray-400 hover:text-gray-600"
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center space-x-2"
             >
-              <LogOut className="h-6 w-6" />
+              <LogOut className="h-4 w-4" />
+              <span>Çıkış</span>
             </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Ana Panel - Test Girişi */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-8">
             {/* Sporcu Tarama */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Sporcu Tarama
-              </h2>
+            <div className="bg-white rounded-xl shadow-lg p-8">
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  Sporcu Tarama
+                </h2>
+                <p className="text-gray-600">
+                  QR kodu tarayın veya sıradaki sporcuya geçin
+                </p>
+              </div>
 
               {!currentAthlete ? (
-                <div className="text-center py-8">
-                  <QrCode className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                <div className="text-center py-12">
+                  <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <QrCode className="h-12 w-12 text-blue-600" />
+                  </div>
                   <button
                     onClick={handleQRScan}
-                    className="bg-blue-600 text-white py-4 px-8 rounded-lg hover:bg-blue-700 flex items-center space-x-3 mx-auto text-lg"
+                    className="bg-blue-600 text-white py-4 px-8 rounded-xl hover:bg-blue-700 flex items-center space-x-3 mx-auto text-lg font-semibold shadow-lg"
                   >
                     <QrCode className="h-6 w-6" />
                     <span>QR Kodu Tara</span>
                   </button>
-                  <p className="text-sm text-gray-500 mt-3">
+                  <p className="text-gray-500 mt-4">
                     Sporcu QR kodunu tarayın veya sıradaki sporcuya geçin
                   </p>
                   {error && (
-                    <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
-                      <div className="flex items-center space-x-2">
+                    <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-4 max-w-md mx-auto">
+                      <div className="flex items-center space-x-3">
                         <AlertCircle className="h-5 w-5 text-red-500" />
-                        <span className="text-red-700 text-sm">{error}</span>
+                        <span className="text-red-700">{error}</span>
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <CheckCircle className="h-6 w-6 text-green-600" />
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                        <CheckCircle className="h-6 w-6 text-green-600" />
+                      </div>
                       <div>
-                        <h3 className="font-medium text-green-900 text-lg">
+                        <h3 className="font-bold text-green-900 text-xl">
                           {currentAthlete.first_name} {currentAthlete.last_name}
                         </h3>
-                        <p className="text-sm text-green-700">
-                          {currentAthlete.uuid} •{" "}
+                        <p className="text-green-700">
+                          {currentAthlete.athlete_code} •{" "}
                           {new Date().getFullYear() -
                             new Date(
-                              currentAthlete.birth_date
+                              currentAthlete.birth_date ||
+                                currentAthlete.birth_year
                             ).getFullYear()}{" "}
                           yaş
                         </p>
@@ -272,7 +287,7 @@ export default function StationPage() {
                     </div>
                     <button
                       onClick={() => setCurrentAthlete(null)}
-                      className="text-green-600 hover:text-green-800 text-sm"
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-medium"
                     >
                       Değiştir
                     </button>
@@ -283,26 +298,26 @@ export default function StationPage() {
 
             {/* Test Değeri Girişi */}
             {currentAthlete && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                  Test Değeri Girişi
-                </h2>
+              <div className="bg-white rounded-xl shadow-lg p-8">
+                <div className="text-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                    Test Değeri Girişi
+                  </h2>
+                  <p className="text-gray-600">{currentStation?.description}</p>
+                </div>
 
-                <div className="space-y-4">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="font-medium text-gray-900 mb-2">
+                <div className="max-w-md mx-auto space-y-6">
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
+                    <h3 className="font-bold text-blue-900 text-lg mb-2">
                       {currentStation?.name}
                     </h3>
-                    <p className="text-sm text-gray-600">
-                      {currentStation?.description}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-blue-700">
                       Birim: {currentStation?.unit}
                     </p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
                       Değer ({currentStation?.unit})
                     </label>
                     <input
@@ -310,26 +325,26 @@ export default function StationPage() {
                       step="0.01"
                       value={testValue}
                       onChange={(e) => setTestValue(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
-                      placeholder={`Değer girin (${currentStation?.unit})`}
+                      className="w-full px-6 py-4 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-2xl text-center font-bold text-black"
+                      placeholder={`Değer girin`}
                       autoFocus
                     />
                   </div>
 
-                  <div className="flex space-x-3">
+                  <div className="space-y-3">
                     <button
                       onClick={handleValueSubmit}
-                      className="flex-1 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 flex items-center justify-center space-x-2 text-lg"
+                      className="w-full bg-green-600 text-white py-4 px-6 rounded-xl hover:bg-green-700 flex items-center justify-center space-x-3 text-lg font-semibold shadow-lg"
                     >
-                      <Save className="h-5 w-5" />
+                      <Save className="h-6 w-6" />
                       <span>Kaydet ve Devam Et</span>
                     </button>
                     <button
                       onClick={handleNextAthlete}
-                      className="bg-gray-600 text-white py-3 px-4 rounded-lg hover:bg-gray-700 flex items-center space-x-2"
+                      className="w-full bg-gray-600 text-white py-3 px-6 rounded-xl hover:bg-gray-700 flex items-center justify-center space-x-2"
                     >
                       <ArrowRight className="h-5 w-5" />
-                      <span>Sıradaki</span>
+                      <span>Sıradaki Sporcu</span>
                     </button>
                   </div>
                 </div>
@@ -340,22 +355,24 @@ export default function StationPage() {
           {/* Yan Panel - Sıra ve Geçmiş */}
           <div className="space-y-6">
             {/* Sıra Durumu */}
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white rounded-xl shadow-lg p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 Sıra Durumu
               </h3>
 
               {stationQueue.length === 0 ? (
-                <div className="text-center py-4">
-                  <AlertCircle className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                <div className="text-center py-6">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <AlertCircle className="h-8 w-8 text-gray-400" />
+                  </div>
                   <p className="text-gray-500">Sırada sporcu yok</p>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {stationQueue.slice(0, 5).map((athlete, index) => (
                     <div
                       key={athlete.id}
-                      className={`p-3 rounded-lg border ${
+                      className={`p-4 rounded-xl border-2 ${
                         index === 0
                           ? "bg-blue-50 border-blue-200"
                           : "bg-gray-50 border-gray-200"
@@ -363,21 +380,21 @@ export default function StationPage() {
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-medium text-gray-900">
+                          <p className="font-semibold text-gray-900">
                             {athlete.first_name} {athlete.last_name}
                           </p>
                           <p className="text-sm text-gray-600">
-                            {athlete.uuid}
+                            {athlete.athlete_code}
                           </p>
                         </div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm font-bold text-gray-500">
                           #{index + 1}
                         </div>
                       </div>
                     </div>
                   ))}
                   {stationQueue.length > 5 && (
-                    <p className="text-sm text-gray-500 text-center">
+                    <p className="text-sm text-gray-500 text-center py-2">
                       ... ve {stationQueue.length - 5} sporcu daha
                     </p>
                   )}
@@ -386,24 +403,24 @@ export default function StationPage() {
             </div>
 
             {/* Son Testler */}
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white rounded-xl shadow-lg p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 Son Testler
               </h3>
 
               {recentTests.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">
-                  Henüz test yapılmamış
-                </p>
+                <div className="text-center py-6">
+                  <p className="text-gray-500">Henüz test yapılmamış</p>
+                </div>
               ) : (
                 <div className="space-y-3">
                   {recentTests.map((test) => (
                     <div
                       key={test.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-xl"
                     >
                       <div>
-                        <p className="font-medium text-gray-900">
+                        <p className="font-semibold text-gray-900">
                           {test.athlete.first_name} {test.athlete.last_name}
                         </p>
                         <p className="text-sm text-gray-600">
@@ -420,22 +437,22 @@ export default function StationPage() {
             </div>
 
             {/* İstatistikler */}
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white rounded-xl shadow-lg p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 Bugünkü İstatistikler
               </h3>
               <div className="grid grid-cols-2 gap-4">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-blue-600">
+                <div className="text-center bg-blue-50 rounded-xl p-4">
+                  <p className="text-3xl font-bold text-blue-600">
                     {recentTests.length}
                   </p>
-                  <p className="text-sm text-gray-600">Toplam Test</p>
+                  <p className="text-sm text-blue-700">Toplam Test</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">
+                <div className="text-center bg-green-50 rounded-xl p-4">
+                  <p className="text-3xl font-bold text-green-600">
                     {stationQueue.length}
                   </p>
-                  <p className="text-sm text-gray-600">Sırada</p>
+                  <p className="text-sm text-green-700">Sırada</p>
                 </div>
               </div>
             </div>
