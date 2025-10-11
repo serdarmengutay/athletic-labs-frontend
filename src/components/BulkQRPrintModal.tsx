@@ -132,7 +132,7 @@ const BulkQRPrintModal: React.FC<BulkQRPrintModalProps> = ({
 
         const pageWidth = 200; // 20 cm
         const pageHeight = 200; // 20 cm
-        
+
         // QR kod boyutu ve konumu - daha büyük ve merkezi
         const qrSize = 140; // QR kod boyutu (mm) - daha büyük
         const qrX = (pageWidth - qrSize) / 2; // Ortala
@@ -150,10 +150,10 @@ const BulkQRPrintModal: React.FC<BulkQRPrintModalProps> = ({
         if (athlete.birth_date) {
           // birth_date formatından yıl çıkar (YYYY-MM-DD veya DD/MM/YYYY)
           const dateStr = athlete.birth_date.toString();
-          if (dateStr.includes('-')) {
-            birthYear = dateStr.split('-')[0]; // YYYY-MM-DD formatı
-          } else if (dateStr.includes('/')) {
-            birthYear = dateStr.split('/')[2]; // DD/MM/YYYY formatı
+          if (dateStr.includes("-")) {
+            birthYear = dateStr.split("-")[0]; // YYYY-MM-DD formatı
+          } else if (dateStr.includes("/")) {
+            birthYear = dateStr.split("/")[2]; // DD/MM/YYYY formatı
           } else if (dateStr.length === 4) {
             birthYear = dateStr; // Sadece yıl
           }
@@ -161,11 +161,11 @@ const BulkQRPrintModal: React.FC<BulkQRPrintModalProps> = ({
 
         // Tek satırda ad soyad - doğum yılı
         const fullText = `${athlete.first_name} ${athlete.last_name} - ${birthYear}`;
-        
+
         // Font ayarları - daha büyük ve net
         pdf.setFontSize(20);
         pdf.setFont("helvetica", "bold");
-        
+
         // Metni ortala
         const textWidth = pdf.getTextWidth(fullText);
         pdf.text(fullText, textX - textWidth / 2, textY);
