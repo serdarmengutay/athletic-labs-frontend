@@ -44,11 +44,12 @@ export default function LoginPage() {
         console.log("Antrenör bilgileri kaydedildi:", response.data.data.coach);
 
         // İstasyon sayfasına yönlendir
-        const stationId =
-          response.data.data.coach.assigned_stations?.[0] || "ffmi-station";
+        // MVP: Station yerine data-entry sayfasına yönlendir
+        // const stationId =
+        //   response.data.data.coach.assigned_stations?.[0] || "ffmi-station";
 
-        console.log("Yönlendiriliyor:", `/station?station=${stationId}`);
-        router.push(`/station?station=${stationId}`);
+        console.log("Yönlendiriliyor: /data-entry");
+        router.push("/data-entry");
       } else {
         throw new Error("Geçersiz yanıt formatı");
       }

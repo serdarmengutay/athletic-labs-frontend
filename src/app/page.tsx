@@ -7,12 +7,13 @@ import {
   Users,
   Trophy,
   BarChart3,
-  QrCode,
+  // QrCode, // MVP: QR özelliği devre dışı
   FileText,
   Calendar,
   ArrowRight,
   CheckCircle,
-  Clock,
+  // Clock,
+  ClipboardList,
 } from "lucide-react";
 import { clubApi, athleteApi, testApi } from "@/lib/api";
 import { Club, Athlete, TestSession } from "@/types";
@@ -68,7 +69,7 @@ export default function Home() {
           </p>
 
           {/* Ana İstatistikler */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl mx-auto">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
             <div className="bg-white rounded-xl shadow-lg p-6">
               <div className="flex items-center justify-center space-x-3">
                 <Trophy className="h-8 w-8 text-blue-600" />
@@ -102,17 +103,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-center space-x-3">
-                <QrCode className="h-8 w-8 text-orange-600" />
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {athletes.length}
-                  </p>
-                  <p className="text-sm text-gray-600">QR Kod</p>
-                </div>
-              </div>
-            </div>
+            {/* MVP: QR İstatistiği kaldırıldı */}
           </div>
         </div>
 
@@ -130,7 +121,7 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Adım 1: Kulüp Seçimi */}
               <div className="text-center">
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -143,7 +134,7 @@ export default function Home() {
                   Test yapılacak kulübü seçin
                 </p>
                 <button
-                  onClick={() => router.push("/test-session")}
+                  onClick={() => router.push("/dashboard")}
                   className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 flex items-center justify-center space-x-2 transition-all duration-200"
                 >
                   <Trophy className="h-5 w-5" />
@@ -163,7 +154,7 @@ export default function Home() {
                   Excel dosyasından sporcu verilerini yükleyin
                 </p>
                 <button
-                  onClick={() => router.push("/test-session")}
+                  onClick={() => router.push("/dashboard")}
                   className="w-full bg-green-600 text-white px-6 py-3 rounded-xl hover:bg-green-700 flex items-center justify-center space-x-2 transition-all duration-200"
                 >
                   <FileText className="h-5 w-5" />
@@ -171,7 +162,8 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* Adım 3: QR Kod Oluştur */}
+              {/* MVP: Adım 3 QR yerine Veri Girişi */}
+              {/* 
               <div className="text-center">
                 <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <QrCode className="h-8 w-8 text-purple-600" />
@@ -190,12 +182,13 @@ export default function Home() {
                   <span>QR Oluştur</span>
                 </button>
               </div>
+              */}
             </div>
 
             {/* Hızlı Başlatma */}
             <div className="mt-8 text-center">
               <button
-                onClick={() => router.push("/test-session")}
+                onClick={() => router.push("/dashboard")}
                 className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-purple-700 flex items-center justify-center space-x-3 mx-auto transition-all duration-200 text-lg font-semibold"
               >
                 <Play className="h-6 w-6" />
@@ -207,7 +200,51 @@ export default function Home() {
 
           {/* Hızlı Erişim */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Antrenör Paneli */}
+            {/* Veri Girişi (Tablet) */}
+            <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-200">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
+                  <ClipboardList className="h-6 w-6 text-indigo-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Test Veri Girişi
+                  </h3>
+                  <p className="text-gray-600">Tablet ile veri girişi yapın</p>
+                </div>
+                <button
+                  onClick={() => router.push("/data-entry")}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center space-x-2"
+                >
+                  <span>Giriş</span>
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Dashboard */}
+            <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-200">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center">
+                  <BarChart3 className="h-6 w-6 text-teal-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Dashboard
+                  </h3>
+                  <p className="text-gray-600">Test sonuçlarını analiz edin</p>
+                </div>
+                <button
+                  onClick={() => router.push("/dashboard")}
+                  className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 flex items-center space-x-2"
+                >
+                  <span>Görüntüle</span>
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* MVP: Antrenör Paneli devre dışı
             <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-200">
               <div className="flex items-center space-x-4">
                 <div className="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center">
@@ -228,28 +265,7 @@ export default function Home() {
                 </button>
               </div>
             </div>
-
-            {/* Dashboard */}
-            <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-200">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
-                  <BarChart3 className="h-6 w-6 text-indigo-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Dashboard
-                  </h3>
-                  <p className="text-gray-600">Test sonuçlarını analiz edin</p>
-                </div>
-                <button
-                  onClick={() => router.push("/dashboard")}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center space-x-2"
-                >
-                  <span>Görüntüle</span>
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
+            */}
           </div>
 
           {/* Son Test Oturumları */}
