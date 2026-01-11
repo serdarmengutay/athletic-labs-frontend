@@ -895,7 +895,7 @@ export default function TestSessionPage() {
       )}
 
       {/* QR Print Modal */}
-      {showQRModal && selectedAthletes.length > 0 && (
+      {showQRModal && selectedAthletes.length > 0 && currentSession && (
         <BulkQRPrintModal
           isOpen={showQRModal}
           onClose={() => setShowQRModal(false)}
@@ -907,6 +907,7 @@ export default function TestSessionPage() {
             club_name: athlete.club?.name || "",
           }))}
           clubName={currentSession?.club?.name || "Test Oturumu"}
+          sessionId={currentSession.id}
         />
       )}
     </div>

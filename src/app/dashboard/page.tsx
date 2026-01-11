@@ -538,6 +538,11 @@ export default function Dashboard() {
           isOpen={showExcelImport}
           onClose={() => setShowExcelImport(false)}
           clubId={selectedClub?.id || ""}
+          sessionId={
+            typeof window !== "undefined"
+              ? localStorage.getItem("testSessionId") || "no-session"
+              : "no-session"
+          }
           onImportSuccess={handleExcelImportSuccess}
         />
       )}
@@ -579,6 +584,7 @@ export default function Dashboard() {
               club_name: athlete.club?.name || "",
             }))}
           clubName={selectedClub.name}
+          sessionId={typeof window !== "undefined" ? localStorage.getItem("testSessionId") || "no-session" : "no-session"}
         />
       )}
 

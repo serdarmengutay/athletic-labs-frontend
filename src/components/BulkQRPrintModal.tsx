@@ -11,6 +11,7 @@ interface BulkQRPrintModalProps {
   onClose: () => void;
   athletes: QRCodeData[];
   clubName: string;
+  sessionId: string;
 }
 
 const BulkQRPrintModal: React.FC<BulkQRPrintModalProps> = ({
@@ -18,6 +19,7 @@ const BulkQRPrintModal: React.FC<BulkQRPrintModalProps> = ({
   onClose,
   athletes,
   clubName,
+  sessionId,
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -40,7 +42,6 @@ const BulkQRPrintModal: React.FC<BulkQRPrintModalProps> = ({
     try {
       // Backend'den QR kodları toplu olarak al
       const athleteIds = athletes.map((athlete) => athlete.athlete_id);
-      const sessionId = "temp-session"; // Geçici session ID
 
       const response = await fetch("/api/qr/bulk-generate", {
         method: "POST",

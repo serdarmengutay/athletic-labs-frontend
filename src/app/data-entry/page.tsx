@@ -19,6 +19,7 @@ import {
 import { Club, Athlete, TestSession } from "@/types";
 import { clubApi, athleteApi, testApi } from "@/lib/api";
 import { TEST_STATIONS } from "@/lib/testStations";
+import firebase from "firebase/compat/app";
 
 // Test parametreleri tanımı
 const TEST_PARAMETERS = [

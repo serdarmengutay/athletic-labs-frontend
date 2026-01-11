@@ -1,4 +1,5 @@
 import axios from "axios";
+import { auth } from "./firebase";
 
 const API_BASE_URL = "http://localhost:5017/api";
 
@@ -12,12 +13,17 @@ const api = axios.create({
 
 // Request interceptor - istek gönderilmeden önce
 api.interceptors.request.use(
-  (config) => {
-    // Auth token'ı ekle (sadece browser'da)
+  async (config) => {
+    // Firebase auth token'ı ekle (sadece browser'da)
     if (typeof window !== "undefined") {
-      const token = localStorage.getItem("authToken");
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const token = await user.getIdToken();
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (error) {
+        console.error("Token alınamadı:", error);
       }
     }
 
@@ -143,6 +149,8 @@ export const testApi = {
   getClubSessions: (
     clubId: string // UUID formatında
   ) => api.get(`/tests/club/${clubId}/sessions`),
+  calculateReport: (sessionId: string) =>
+    api.post(`/test-sessions/${sessionId}/calculate-report`),
 };
 
 // Coach API
