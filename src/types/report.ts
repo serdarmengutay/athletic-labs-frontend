@@ -56,3 +56,58 @@ export interface AthleteReportResponse {
     areasForImprovement: string[];
   };
 }
+
+export interface MetricResult {
+  value: number | null;
+  percentile: number | null;
+  target: number | null;
+}
+
+export interface FrontendAthleteReport {
+  athleteId: string;
+  fullName: string;
+  birthYear: number;
+  ageGroupAverages?: {
+    sprint1: number | null;
+    sprint2: number | null;
+    agility: number | null;
+    flexibility: number | null;
+    verticalJump: number | null;
+    passCount: number | null;
+    bmi: number | null;
+  };
+  measurements?: {
+    height?: number;
+    weight?: number;
+    flexibility?: number;
+    sprint30m?: number;
+    sprint30mSecond?: number;
+    agility?: number;
+    verticalJump?: number;
+    passCount?: number;
+  };
+  metrics: {
+    sprint1: MetricResult;
+    sprint2: MetricResult;
+    agility: MetricResult;
+    flexibility: MetricResult;
+    verticalJump: MetricResult;
+    passCount: MetricResult;
+    bmi: MetricResult;
+    fatigueIndex: MetricResult;
+  };
+  overallPerformance: number;
+}
+
+export interface SessionReportResponse {
+  testSessionId: string;
+  clubName: string;
+  testDate?: string;
+  reportGeneratedAt: string;
+  athletes: FrontendAthleteReport[];
+  warnings?: {
+    athleteId: string;
+    fullName: string;
+    warning: string;
+  }[];
+}

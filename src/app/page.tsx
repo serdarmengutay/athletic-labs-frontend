@@ -9,7 +9,6 @@ import {
   Users,
   Trophy,
   BarChart3,
-  FileText,
   Calendar,
   ArrowRight,
   CheckCircle,
@@ -17,13 +16,16 @@ import {
   LogOut,
   Upload,
 } from "lucide-react";
-import { clubApi, athleteApi, testApi } from "@/lib/api";
+import { clubApi, athleteApi, testApi, mvpTestSessionApi } from "@/lib/api";
 import { Club, Athlete, TestSession } from "@/types";
 import * as XLSX from "xlsx";
 
 interface ParsedAthlete {
   fullName: string;
   birthDate: string;
+  birthYear?: number;
+  athleteId?: string;
+  athleteTestId?: string;
 }
 
 export default function Home() {
@@ -84,6 +86,23 @@ export default function Home() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const extractBirthYear = (birthDate: string): number | undefined => {
+    const parts = birthDate.split(/[./-]/).filter(Boolean);
+    const yearPart = parts[parts.length - 1];
+    const year = Number.parseInt(yearPart, 10);
+    return Number.isFinite(year) && year > 1900 ? year : undefined;
+  };
+
+  const normalizeBirthDate = (birthDate: string): string | undefined => {
+    const parts = birthDate.split(/[./-]/).filter(Boolean);
+    if (parts.length !== 3) return undefined;
+
+    const [day, month, year] = parts;
+    if (year.length !== 4) return undefined;
+
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  };
+
   const handleSubmitTestSession = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log("Test Oturumu Verileri:", formData);
@@ -94,35 +113,83 @@ export default function Home() {
       return;
     }
 
-    let sessionId: string | null = null;
+    if (
+      !formData.clubName ||
+      !formData.clubResponsible ||
+      !formData.city ||
+      !formData.sportType ||
+      !formData.testDate
+    ) {
+      alert("Lütfen kulüp adı, yetkili, şehir, spor dalı ve test tarihini doldurun.");
+      return;
+    }
 
     try {
-      // Backend'de test session oluştur
-      const sessionResponse = await testApi.createSession({
-        club_id: formData.clubName || "default-club",
-        test_date: new Date().toISOString().split("T")[0],
+      const sessionResponse = await mvpTestSessionApi.create({
+        clubName: formData.clubName,
+        clubResponsibleName: formData.clubResponsible,
+        clubResponsibleEmail: formData.email || undefined,
+        clubResponsiblePhone: formData.phone || undefined,
+        city: formData.city,
+        sportType: formData.sportType,
+        testDate: formData.testDate,
         notes: `Test oturumu - ${parsedAthletes.length} sporcu`,
       });
 
-      sessionId = sessionResponse.data?.id || sessionResponse.data?.data?.id;
+      const sessionId = sessionResponse.data?.data?.id;
+      if (!sessionId) {
+        throw new Error("Backend session ID döndürmedi.");
+      }
+
       console.log("Backend'den alınan Session ID:", sessionId);
-    } catch (error: any) {
+
+      const athletesForImport = parsedAthletes.map((athlete) => ({
+        fullName: athlete.fullName,
+        birthDate: normalizeBirthDate(athlete.birthDate),
+        birthYear: extractBirthYear(athlete.birthDate),
+      }));
+
+      const importResponse = await mvpTestSessionApi.importAthletes(
+        sessionId,
+        athletesForImport
+      );
+      const importedAthletes = importResponse.data?.data?.athletes || [];
+      const failedCount = importResponse.data?.data?.failed || 0;
+
+      if (failedCount > 0) {
+        console.warn("Import sırasında bazı sporcular atlandı:", importResponse.data);
+        alert(`${failedCount} sporcu backend'e aktarılamadı. Konsolu kontrol edin.`);
+      }
+
+      const athletesWithBackendIds = parsedAthletes.map((athlete, index) => ({
+        ...athlete,
+        birthYear: extractBirthYear(athlete.birthDate),
+        athleteId: importedAthletes[index]?.athleteId,
+        athleteTestId: importedAthletes[index]?.athleteTestId,
+      }));
+
+      localStorage.setItem("parsedAthletes", JSON.stringify(athletesWithBackendIds));
+      localStorage.setItem(
+        "testSessionName",
+        formData.clubName || "Test Oturumu"
+      );
+      localStorage.setItem("testSessionId", sessionId);
+      localStorage.setItem("testSessionDate", formData.testDate);
+      localStorage.removeItem("testCompleted");
+
+      router.push("/test-data-entry");
+    } catch (error: unknown) {
       console.error("Backend session oluşturma hatası:", error);
-      // Fallback: Geçici UUID oluştur
-      sessionId = crypto.randomUUID();
-      console.log("Fallback Session ID oluşturuldu:", sessionId);
+      const apiMessage =
+        typeof error === "object" && error !== null && "response" in error
+          ? (error as { response?: { data?: { message?: string } } }).response
+              ?.data?.message
+          : undefined;
+      alert(
+        apiMessage ||
+          "Test oturumu backend'de oluşturulamadı. Lütfen backend loglarını kontrol edin."
+      );
     }
-
-    // Verileri localStorage'a kaydet
-    localStorage.setItem("parsedAthletes", JSON.stringify(parsedAthletes));
-    localStorage.setItem(
-      "testSessionName",
-      formData.clubName || "Test Oturumu"
-    );
-    localStorage.setItem("testSessionId", sessionId || crypto.randomUUID());
-    localStorage.removeItem("testCompleted");
-
-    router.push("/test-data-entry");
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

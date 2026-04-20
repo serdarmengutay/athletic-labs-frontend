@@ -18,6 +18,7 @@ import {
   X,
   Download,
 } from "lucide-react";
+import { mvpTestSessionApi } from "@/lib/api";
 
 interface Measurements {
   height?: number;
@@ -27,12 +28,15 @@ interface Measurements {
   sprint30mSecond?: number;
   agility?: number;
   verticalJump?: number;
+  passCount?: number;
 }
 
 interface ParsedAthlete {
   fullName: string;
   birthDate: string;
   birthYear: number;
+  athleteId?: string;
+  athleteTestId?: string;
   measurements?: Measurements;
 }
 
@@ -46,6 +50,7 @@ const REQUIRED_FIELDS: { key: keyof Measurements; label: string }[] = [
   { key: "sprint30mSecond", label: "30m Sprint 2" },
   { key: "agility", label: "Çeviklik" },
   { key: "verticalJump", label: "Dikey Sıçrama" },
+  { key: "passCount", label: "Pas" },
 ];
 
 const getCompletionStatus = (
@@ -82,6 +87,7 @@ export default function TestDataEntryPage() {
   const [isTestCompleted, setIsTestCompleted] = useState(false);
   const [showMissingModal, setShowMissingModal] = useState(false);
   const [testSessionName, setTestSessionName] = useState("");
+  const [testSessionDate, setTestSessionDate] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({
     current: 0,
@@ -98,10 +104,13 @@ export default function TestDataEntryPage() {
           (a: {
             fullName: string;
             birthDate: string;
+            athleteId?: string;
+            athleteTestId?: string;
+            birthYear?: number;
             measurements?: Measurements;
           }) => ({
             ...a,
-            birthYear: extractBirthYear(a.birthDate),
+            birthYear: a.birthYear || extractBirthYear(a.birthDate),
             measurements: a.measurements || {},
           })
         );
@@ -112,6 +121,8 @@ export default function TestDataEntryPage() {
     }
     const sessionName = localStorage.getItem("testSessionName");
     if (sessionName) setTestSessionName(sessionName);
+    const sessionDate = localStorage.getItem("testSessionDate");
+    if (sessionDate) setTestSessionDate(sessionDate);
     const sessionId = localStorage.getItem("testSessionId");
     if (sessionId) setTestSessionId(sessionId);
     const completed = localStorage.getItem("testCompleted");
@@ -183,8 +194,16 @@ export default function TestDataEntryPage() {
     setCurrentMeasurements((prev) => ({ ...prev, [key]: numValue }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedAthlete) return;
+
+    if (!selectedAthlete.athleteTestId) {
+      alert(
+        "Bu sporcu backend oturumuna bağlı değil. Lütfen ana ekrandan yeni bir test oturumu başlatın."
+      );
+      return;
+    }
+
     const updatedAthletes = athletes.map((a) => {
       if (
         a.fullName === selectedAthlete.fullName &&
@@ -196,12 +215,30 @@ export default function TestDataEntryPage() {
     });
     setAthletes(updatedAthletes);
     localStorage.setItem("parsedAthletes", JSON.stringify(updatedAthletes));
-    console.log("Sporcu güncellendi:", {
-      ...selectedAthlete,
-      measurements: currentMeasurements,
-    });
-    setShowSaveSuccess(true);
-    setTimeout(() => setShowSaveSuccess(false), 2000);
+
+    try {
+      await mvpTestSessionApi.saveMeasurements(
+        selectedAthlete.athleteTestId,
+        currentMeasurements
+      );
+      console.log("Sporcu backend'e kaydedildi:", {
+        ...selectedAthlete,
+        measurements: currentMeasurements,
+      });
+      setShowSaveSuccess(true);
+      setTimeout(() => setShowSaveSuccess(false), 2000);
+    } catch (error: unknown) {
+      console.error("Ölçüm kaydetme hatası:", error);
+      const apiMessage =
+        typeof error === "object" && error !== null && "response" in error
+          ? (error as { response?: { data?: { message?: string } } }).response
+              ?.data?.message
+          : undefined;
+      alert(
+        apiMessage ||
+          "Ölçümler backend'e kaydedilemedi. Lütfen tekrar deneyin."
+      );
+    }
   };
 
   const handlePrevAthlete = () => {
@@ -243,11 +280,6 @@ export default function TestDataEntryPage() {
     try {
       // Import export utility dynamically
       const { exportReportsToZip } = await import("@/utils/reportExport");
-      const { testApi } = await import("@/lib/api");
-
-      // Fetch all reports from backend using stored UUID
-      const reports = [];
-
       if (!testSessionId) {
         throw new Error(
           "Test session ID bulunamadı. Lütfen yeni bir test oturumu başlatın."
@@ -256,21 +288,40 @@ export default function TestDataEntryPage() {
 
       for (let i = 0; i < athletes.length; i++) {
         const athlete = athletes[i];
-        try {
-          // Use the backend UUID stored in state
-          const response = await testApi.calculateReport(testSessionId);
-          reports.push(response.data);
-        } catch (error) {
-          console.error(
-            `Failed to fetch report for ${athlete.fullName}:`,
-            error
-          );
+        if (!athlete.athleteTestId || !athlete.measurements) {
+          throw new Error(`${athlete.fullName} backend oturumuna bağlı değil.`);
         }
+
+        await mvpTestSessionApi.saveMeasurements(
+          athlete.athleteTestId,
+          athlete.measurements
+        );
+        setExportProgress({ current: i + 1, total: athletes.length });
       }
+
+      const response = await mvpTestSessionApi.calculateReport(testSessionId);
+      const reportSession = response.data;
+
+      if (!reportSession.athletes?.length) {
+        throw new Error("Backend rapor içinde sporcu döndürmedi.");
+      }
+      if (!reportSession.testDate && testSessionDate) {
+        reportSession.testDate = testSessionDate;
+      }
+
+      const measurementByAthleteId = new Map(
+        athletes
+          .filter((athlete) => athlete.athleteId)
+          .map((athlete) => [athlete.athleteId, athlete.measurements])
+      );
+      reportSession.athletes = reportSession.athletes.map((report) => ({
+        ...report,
+        measurements: measurementByAthleteId.get(report.athleteId),
+      }));
 
       // Export to ZIP with progress callback
       await exportReportsToZip(
-        reports,
+        reportSession,
         testSessionName || "Test_Oturumu",
         (current, total) => {
           setExportProgress({ current, total });
@@ -285,7 +336,7 @@ export default function TestDataEntryPage() {
       console.log("========================================");
       console.log("TEST OTURUMU TAMAMLANDI - RAPORLAR İNDİRİLDİ");
       console.log("========================================");
-      console.log(`Toplam ${reports.length} rapor export edildi`);
+      console.log(`Toplam ${reportSession.athletes.length} rapor export edildi`);
     } catch (error) {
       console.error("Export error:", error);
       alert("Raporlar export edilirken hata oluştu. Lütfen tekrar deneyin.");
@@ -493,7 +544,7 @@ export default function TestDataEntryPage() {
                     Test Tamamlandı!
                   </p>
                   <p className="text-sm text-green-600">
-                    Tüm veriler console'a yazdırıldı
+                    Tüm veriler konsola yazdırıldı
                   </p>
                 </div>
               </div>
@@ -697,8 +748,8 @@ export default function TestDataEntryPage() {
                   />
                 </div>
               </div>
-              {/* Row 3: Agility, Vertical Jump */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Row 3: Agility, Vertical Jump, Pass */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     🔄 Çeviklik (sn)
@@ -727,6 +778,22 @@ export default function TestDataEntryPage() {
                       handleMeasurementChange("verticalJump", e.target.value)
                     }
                     placeholder="Dikey Sıçrama"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    disabled={isTestCompleted}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    ⚽ Pas (30 sn)
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={currentMeasurements.passCount ?? ""}
+                    onChange={(e) =>
+                      handleMeasurementChange("passCount", e.target.value)
+                    }
+                    placeholder="Pas adedi"
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
                     disabled={isTestCompleted}
                   />

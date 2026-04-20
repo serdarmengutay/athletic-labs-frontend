@@ -1,5 +1,6 @@
 import axios from "axios";
 import { auth } from "./firebase";
+import { SessionReportResponse } from "@/types/report";
 
 const API_BASE_URL = "http://localhost:5017/api";
 
@@ -151,6 +152,46 @@ export const testApi = {
   ) => api.get(`/tests/club/${clubId}/sessions`),
   calculateReport: (sessionId: string) =>
     api.post(`/test-sessions/${sessionId}/calculate-report`),
+};
+
+export const mvpTestSessionApi = {
+  create: (data: {
+    clubName: string;
+    clubResponsibleName: string;
+    clubResponsibleEmail?: string;
+    clubResponsiblePhone?: string;
+    city: string;
+    sportType: string;
+    testDate: string;
+    notes?: string;
+  }) => api.post("/test-sessions", data),
+  importAthletes: (
+    testSessionId: string,
+    athletes: {
+      fullName: string;
+      birthDate?: string;
+      birthYear?: number;
+    }[]
+  ) => api.post(`/test-sessions/${testSessionId}/athletes`, { athletes }),
+  getAthletes: (testSessionId: string) =>
+    api.get(`/test-sessions/${testSessionId}/athletes`),
+  saveMeasurements: (
+    athleteTestId: string,
+    data: {
+      height?: number;
+      weight?: number;
+      flexibility?: number;
+      sprint30m?: number;
+      sprint30mSecond?: number;
+      agility?: number;
+      verticalJump?: number;
+      passCount?: number;
+    }
+  ) => api.post(`/athlete-tests/${athleteTestId}/measurements`, data),
+  calculateReport: (testSessionId: string) =>
+    api.post<SessionReportResponse>(
+      `/test-sessions/${testSessionId}/calculate-report`
+    ),
 };
 
 // Coach API
