@@ -172,7 +172,8 @@ function valueOf(metric: MetricResult, fallback?: number): number | null {
 
 function formatValue(value: number | null | undefined, unit = ""): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "-";
-  const precision = unit === "sn" ? 2 : unit === "%" ? 1 : 1;
+  const precision =
+    unit === "sn" ? 2 : unit === "%" ? 1 : unit === "adet" ? 0 : 1;
   return `${Number(value).toFixed(precision)}${unit ? ` ${unit}` : ""}`;
 }
 
@@ -194,30 +195,96 @@ function vkiLabel(vki: number | null): string {
   return `${formatValue(vki)} (Çok yüksek)`;
 }
 
-function scoreFromValues(
+type ChartDirection = "lower_is_better" | "higher_is_better";
+
+type ChartMetric = {
+  label: string;
+  shortLabel: string;
+  unit: string;
+  direction: ChartDirection;
+  min: number;
+  max: number;
+};
+
+type ChartDatum = {
+  label: string;
+  shortLabel: string;
+  unit: string;
+  athleteValue: number | null;
+  averageValue: number | null;
+  athletePlot: number;
+  averagePlot: number;
+};
+
+const CHART_METRICS: ChartMetric[] = [
+  {
+    label: "VKI",
+    shortLabel: "VKI",
+    unit: "",
+    direction: "higher_is_better",
+    min: 8,
+    max: 60,
+  },
+  {
+    label: "Esneklik",
+    shortLabel: "Esneklik",
+    unit: "cm",
+    direction: "higher_is_better",
+    min: -30,
+    max: 60,
+  },
+  {
+    label: "30m Koşu",
+    shortLabel: "30m",
+    unit: "sn",
+    direction: "lower_is_better",
+    min: 2,
+    max: 15,
+  },
+  {
+    label: "İkinci 30m",
+    shortLabel: "2. 30m",
+    unit: "sn",
+    direction: "lower_is_better",
+    min: 2,
+    max: 15,
+  },
+  {
+    label: "Çeviklik",
+    shortLabel: "Çeviklik",
+    unit: "sn",
+    direction: "lower_is_better",
+    min: 4,
+    max: 40,
+  },
+  {
+    label: "Dikey Sıçrama",
+    shortLabel: "Sıçrama",
+    unit: "cm",
+    direction: "higher_is_better",
+    min: 5,
+    max: 120,
+  },
+  {
+    label: "Pas",
+    shortLabel: "Pas",
+    unit: "adet",
+    direction: "higher_is_better",
+    min: 0,
+    max: 300,
+  },
+];
+
+function normalizeForRadar(
   value: number | null,
-  average: number | null | undefined,
-  lowerIsBetter = false
+  metric: ChartMetric
 ): number {
-  if (value === null || average === null || average === undefined || average <= 0) {
-    return 50;
-  }
-
-  const ratio = lowerIsBetter ? average / value : value / average;
-  return Math.max(5, Math.min(100, Math.round(ratio * 50)));
-}
-
-function comparisonScore(
-  metric: MetricResult,
-  value: number | null,
-  average: number | null | undefined,
-  lowerIsBetter = false
-): number {
-  if (metric.percentile !== null && Number.isFinite(metric.percentile)) {
-    return Math.max(0, Math.min(100, Number(metric.percentile)));
-  }
-
-  return scoreFromValues(value, average, lowerIsBetter);
+  if (value === null || Number.isNaN(value)) return 0;
+  const clamped = Math.max(metric.min, Math.min(metric.max, value));
+  const ratio = (clamped - metric.min) / (metric.max - metric.min);
+  const normalized =
+    metric.direction === "lower_is_better" ? 1 - ratio : ratio;
+  return Math.max(0, Math.min(100, normalized * 100));
 }
 
 function MvpAthleteReport({
@@ -249,46 +316,73 @@ function MvpAthleteReport({
   const passCount = valueOf(passMetric, measurements.passCount);
   const fatigue = valueOf(m.fatigueIndex);
   const averages = report.ageGroupAverages;
-
-  const radarData = [
+  const radarData: ChartDatum[] = [
     {
       label: "VKI",
-      score: comparisonScore(m.bmi, m.bmi.value, averages?.bmi),
-      averageScore: scoreFromValues(averages?.bmi ?? null, averages?.bmi),
+      shortLabel: CHART_METRICS[0].shortLabel,
+      unit: "",
+      athleteValue: m.bmi.value,
+      averageValue: averages?.bmi ?? null,
+      athletePlot: normalizeForRadar(m.bmi.value, CHART_METRICS[0]),
+      averagePlot: normalizeForRadar(averages?.bmi ?? null, CHART_METRICS[0]),
     },
     {
       label: "Esneklik",
-      score: comparisonScore(m.flexibility, flexibility, averages?.flexibility),
-      averageScore: scoreFromValues(averages?.flexibility ?? null, averages?.flexibility),
+      shortLabel: CHART_METRICS[1].shortLabel,
+      unit: "cm",
+      athleteValue: flexibility,
+      averageValue: averages?.flexibility ?? null,
+      athletePlot: normalizeForRadar(flexibility, CHART_METRICS[1]),
+      averagePlot: normalizeForRadar(averages?.flexibility ?? null, CHART_METRICS[1]),
     },
     {
       label: "30m Koşu",
-      score: comparisonScore(m.sprint1, sprint1, averages?.sprint1, true),
-      averageScore: scoreFromValues(averages?.sprint1 ?? null, averages?.sprint1, true),
+      shortLabel: CHART_METRICS[2].shortLabel,
+      unit: "sn",
+      athleteValue: sprint1,
+      averageValue: averages?.sprint1 ?? null,
+      athletePlot: normalizeForRadar(sprint1, CHART_METRICS[2]),
+      averagePlot: normalizeForRadar(averages?.sprint1 ?? null, CHART_METRICS[2]),
     },
     {
       label: "İkinci 30m",
-      score: comparisonScore(m.sprint2, sprint2, averages?.sprint2, true),
-      averageScore: scoreFromValues(averages?.sprint2 ?? null, averages?.sprint2, true),
+      shortLabel: CHART_METRICS[3].shortLabel,
+      unit: "sn",
+      athleteValue: sprint2,
+      averageValue: averages?.sprint2 ?? null,
+      athletePlot: normalizeForRadar(sprint2, CHART_METRICS[3]),
+      averagePlot: normalizeForRadar(averages?.sprint2 ?? null, CHART_METRICS[3]),
     },
     {
       label: "Çeviklik",
-      score: comparisonScore(m.agility, agility, averages?.agility, true),
-      averageScore: scoreFromValues(averages?.agility ?? null, averages?.agility, true),
+      shortLabel: CHART_METRICS[4].shortLabel,
+      unit: "sn",
+      athleteValue: agility,
+      averageValue: averages?.agility ?? null,
+      athletePlot: normalizeForRadar(agility, CHART_METRICS[4]),
+      averagePlot: normalizeForRadar(averages?.agility ?? null, CHART_METRICS[4]),
     },
     {
       label: "Dikey Sıçrama",
-      score: comparisonScore(m.verticalJump, verticalJump, averages?.verticalJump),
-      averageScore: scoreFromValues(averages?.verticalJump ?? null, averages?.verticalJump),
+      shortLabel: CHART_METRICS[5].shortLabel,
+      unit: "cm",
+      athleteValue: verticalJump,
+      averageValue: averages?.verticalJump ?? null,
+      athletePlot: normalizeForRadar(verticalJump, CHART_METRICS[5]),
+      averagePlot: normalizeForRadar(averages?.verticalJump ?? null, CHART_METRICS[5]),
     },
     {
       label: "Pas",
-      score: comparisonScore(passMetric, passCount, averages?.passCount),
-      averageScore: scoreFromValues(averages?.passCount ?? null, averages?.passCount),
+      shortLabel: CHART_METRICS[6].shortLabel,
+      unit: "adet",
+      athleteValue: passCount,
+      averageValue: averages?.passCount ?? null,
+      athletePlot: normalizeForRadar(passCount, CHART_METRICS[6]),
+      averagePlot: normalizeForRadar(averages?.passCount ?? null, CHART_METRICS[6]),
     },
   ];
 
-  const barData = radarData;
+  const barData: ChartDatum[] = radarData;
 
   const performanceRows = [
     { label: "30m Koşu", value: formatValue(sprint1, "sn"), icon: Timer },
@@ -474,27 +568,29 @@ function DataRow({
 function RadarSvg({
   data,
 }: {
-  data: { label: string; score: number; averageScore: number }[];
+  data: ChartDatum[];
 }) {
   const cx = 190;
   const cy = 142;
-  const maxR = 104;
+  const maxR = 96;
   const points = data.map((item, index) => {
     const angle = -Math.PI / 2 + (index * Math.PI * 2) / data.length;
-    const radius = (item.score / 100) * maxR;
+    const radius = (item.athletePlot / 100) * maxR;
+    const labelRadius =
+      item.shortLabel.length > 8 ? maxR + 24 : maxR + 28;
     return {
       ...item,
       x: cx + Math.cos(angle) * radius,
       y: cy + Math.sin(angle) * radius,
-      lx: cx + Math.cos(angle) * (maxR + 38),
-      ly: cy + Math.sin(angle) * (maxR + 38),
+      lx: cx + Math.cos(angle) * labelRadius,
+      ly: cy + Math.sin(angle) * labelRadius,
       ax: cx + Math.cos(angle) * maxR,
       ay: cy + Math.sin(angle) * maxR,
     };
   });
   const averagePoints = data.map((item, index) => {
     const angle = -Math.PI / 2 + (index * Math.PI * 2) / data.length;
-    const radius = (item.averageScore / 100) * maxR;
+    const radius = (item.averagePlot / 100) * maxR;
     return {
       x: cx + Math.cos(angle) * radius,
       y: cy + Math.sin(angle) * radius,
@@ -559,15 +655,15 @@ function RadarSvg({
             x={point.lx}
             y={point.ly}
             fill="#dfe8dd"
-            fontSize="11"
+            fontSize="10"
             textAnchor={point.lx < cx - 10 ? "end" : point.lx > cx + 10 ? "start" : "middle"}
             dominantBaseline="middle"
           >
-            {point.label}
+            {point.shortLabel}
           </text>
         ))}
       </g>
-      <Legend x={78} y={18} athleteColor="#d7f33d" averageColor="#7c8580" />
+      <Legend x={76} y={18} athleteColor="#d7f33d" averageColor="#7c8580" />
     </svg>
   );
 }
@@ -575,9 +671,8 @@ function RadarSvg({
 function BarSvg({
   data,
 }: {
-  data: { label: string; score: number; averageScore: number }[];
+  data: ChartDatum[];
 }) {
-  const max = 100;
   const chartHeight = 205;
   const baseY = 230;
   const startX = 30;
@@ -586,21 +681,14 @@ function BarSvg({
   return (
     <svg width="370" height="285" viewBox="0 0 370 285" style={styles.chartSvg}>
       <rect x="0" y="0" width="370" height="285" fill="#06110f" />
-      {[0, 25, 50, 75, 100].map((tick) => {
-        const y = baseY - (tick / max) * chartHeight;
-        return (
-          <g key={tick}>
-            <line x1="24" y1={y} x2="350" y2={y} stroke="#1d2d29" />
-            <text x="8" y={y + 4} fill="#6f7c77" fontSize="9">
-              {tick}
-            </text>
-          </g>
-        );
+      {[0.25, 0.5, 0.75, 1].map((tick, index) => {
+        const y = baseY - tick * chartHeight;
+        return <line key={index} x1="24" y1={y} x2="350" y2={y} stroke="#1d2d29" />;
       })}
       {data.map((item, index) => {
         const x = startX + index * groupWidth;
-        const athleteHeight = (item.score / max) * chartHeight;
-        const averageHeight = (item.averageScore / max) * chartHeight;
+        const athleteHeight = (item.athletePlot / 100) * chartHeight;
+        const averageHeight = (item.averagePlot / 100) * chartHeight;
         return (
           <g key={item.label}>
             <rect
@@ -620,14 +708,32 @@ function BarSvg({
               rx="4"
             />
             <text
+              x={x + 8.5}
+              y={baseY - athleteHeight - 6}
+              fill="#d7f33d"
+              fontSize="8"
+              textAnchor="middle"
+            >
+              {formatValue(item.athleteValue, item.unit)}
+            </text>
+            <text
+              x={x + 28.5}
+              y={baseY - averageHeight - 6}
+              fill="#a0aba5"
+              fontSize="8"
+              textAnchor="middle"
+            >
+              {formatValue(item.averageValue, item.unit)}
+            </text>
+            <text
               x={x + 18}
-              y="257"
+              y="259"
               fill="#bac5bf"
-              fontSize="9"
+              fontSize="8.5"
               textAnchor="end"
               transform={`rotate(-22 ${x + 18} 257)`}
             >
-              {item.label}
+              {item.shortLabel}
             </text>
           </g>
         );
@@ -745,7 +851,7 @@ const styles: Record<string, CSSProperties> = {
     background: "#06110f",
     color: "#eef6ef",
     fontFamily:
-      "Roboto, Arial, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+      "\"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif",
     overflow: "hidden",
     borderRadius: 16,
   },

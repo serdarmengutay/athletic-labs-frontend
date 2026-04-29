@@ -59,6 +59,7 @@ export interface AthleteReportResponse {
 
 export interface MetricResult {
   value: number | null;
+  score?: number | null;
   percentile: number | null;
   target: number | null;
 }
@@ -68,6 +69,15 @@ export interface FrontendAthleteReport {
   fullName: string;
   birthYear: number;
   ageGroupAverages?: {
+    sprint1: number | null;
+    sprint2: number | null;
+    agility: number | null;
+    flexibility: number | null;
+    verticalJump: number | null;
+    passCount: number | null;
+    bmi: number | null;
+  };
+  ageGroupPercentiles?: {
     sprint1: number | null;
     sprint2: number | null;
     agility: number | null;
