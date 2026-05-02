@@ -300,11 +300,12 @@ export default function ScoutingDetailPage() {
       <CssBaseline />
       <Box
         sx={{
-          minHeight: "100vh",
+          height: "100vh",
           background:
             "radial-gradient(circle at top left, rgba(74,222,128,0.10), transparent 22%), #0a0f14",
           color: "#f5f7fa",
           display: "flex",
+          overflow: "hidden",
         }}
       >
         <ScoutingSidebar activeKey="detail" />
@@ -312,6 +313,8 @@ export default function ScoutingDetailPage() {
           sx={{
             flex: 1,
             minWidth: 0,
+            height: "100vh",
+            overflowY: "auto",
             p: { xs: 2, md: 3 },
             display: "grid",
             gap: 2.2,

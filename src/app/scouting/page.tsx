@@ -627,16 +627,17 @@ export default function ScoutingPage() {
       <CssBaseline />
       <Box
         sx={{
-          minHeight: "100vh",
+          height: "100vh",
           background:
             "radial-gradient(circle at top left, rgba(74,222,128,0.10), transparent 22%), #0a0f14",
           color: "#f5f7fa",
           display: "flex",
+          overflow: "hidden",
         }}
       >
         <ScoutingSidebar activeKey="players" />
 
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ flex: 1, minWidth: 0, height: "100vh", overflowY: "auto" }}>
           <Box
             sx={{
               height: 72,

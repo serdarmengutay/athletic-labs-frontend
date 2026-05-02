@@ -41,6 +41,10 @@ export function ScoutingSidebar({
       component="aside"
       sx={{
         width: drawerWidth,
+        height: "100vh",
+        position: "sticky",
+        top: 0,
+        alignSelf: "flex-start",
         borderRight: "1px solid rgba(255,255,255,0.06)",
         backgroundColor: "#0c1117",
         p: 2.5,
