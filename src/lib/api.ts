@@ -1,6 +1,13 @@
 import axios from "axios";
 import { auth } from "./firebase";
+import { onAuthStateChanged, User } from "firebase/auth";
 import { SessionReportResponse } from "@/types/report";
+import {
+  ScoutingFilterOptions,
+  ScoutingFilters,
+  ScoutingListResponse,
+  ScoutingPlayerDetail,
+} from "@/types/scouting";
 
 const API_BASE_URL = "http://localhost:5017/api";
 
@@ -12,13 +19,43 @@ const api = axios.create({
   timeout: 10000, // 10 saniye timeout
 });
 
+async function waitForFirebaseUser(): Promise<User | null> {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  if (auth.currentUser) {
+    return auth.currentUser;
+  }
+
+  const authWithReady = auth as typeof auth & {
+    authStateReady?: () => Promise<void>;
+  };
+
+  if (typeof authWithReady.authStateReady === "function") {
+    await authWithReady.authStateReady();
+    return auth.currentUser;
+  }
+
+  return new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+    setTimeout(() => {
+      unsubscribe();
+      resolve(auth.currentUser);
+    }, 1500);
+  });
+}
+
 // Request interceptor - istek gönderilmeden önce
 api.interceptors.request.use(
   async (config) => {
     // Firebase auth token'ı ekle (sadece browser'da)
     if (typeof window !== "undefined") {
       try {
-        const user = auth.currentUser;
+        const user = await waitForFirebaseUser();
         if (user) {
           const token = await user.getIdToken();
           config.headers.Authorization = `Bearer ${token}`;
@@ -191,6 +228,21 @@ export const mvpTestSessionApi = {
   calculateReport: (testSessionId: string) =>
     api.post<SessionReportResponse>(
       `/test-sessions/${testSessionId}/calculate-report`
+    ),
+};
+
+export const scoutingApi = {
+  getPlayers: (params: ScoutingFilters) =>
+    api.get<{ success: boolean; data: ScoutingListResponse }>("/scouting/players", {
+      params,
+    }),
+  getPlayerDetail: (athleteTestId: string) =>
+    api.get<{ success: boolean; data: ScoutingPlayerDetail }>(
+      `/scouting/players/${athleteTestId}`
+    ),
+  getFilterOptions: () =>
+    api.get<{ success: boolean; data: ScoutingFilterOptions }>(
+      "/scouting/filters"
     ),
 };
 

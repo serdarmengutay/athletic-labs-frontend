@@ -14,6 +14,7 @@ import {
   CheckCircle,
   ClipboardList,
   LogOut,
+  Search,
   Upload,
 } from "lucide-react";
 import { clubApi, athleteApi, testApi, mvpTestSessionApi } from "@/lib/api";
@@ -249,6 +250,13 @@ export default function Home() {
           <p className="text-xl text-gray-600 mb-8">
             Sporcu Performans Takip Sistemi
           </p>
+          <button
+            onClick={() => router.push("/scouting")}
+            className="mb-8 inline-flex items-center gap-2 rounded-full bg-gray-900 px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-gray-800"
+          >
+            <Search className="h-4 w-4" />
+            Scouting Ekranını Aç
+          </button>
 
           {/* Ana İstatistikler */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">

@@ -26,7 +26,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
     "@headlessui/react": "^2.2.7",
+    "@mui/icons-material": "^9.0.0",
+    "@mui/material": "^9.0.0",
+    "@mui/x-data-grid": "^9.0.4",
     "@types/qrcode": "^1.5.5",
     "@yudiel/react-qr-scanner": "^2.3.1",
     "@zxing/library": "^0.21.3",
