@@ -16,6 +16,14 @@ import {
   Loader2,
 } from "lucide-react";
 
+interface ApiError {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+}
+
 export default function ReportPage() {
   const params = useParams();
   const router = useRouter();
@@ -36,9 +44,12 @@ export default function ReportPage() {
       setLoading(true);
       const response = await testApi.calculateReport(sessionId);
       setReport(response.data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Report fetch error:", err);
-      setError(err.response?.data?.message || "Rapor yüklenirken hata oluştu");
+      const apiError = err as ApiError;
+      setError(
+        apiError.response?.data?.message || "Rapor yüklenirken hata oluştu"
+      );
     } finally {
       setLoading(false);
     }

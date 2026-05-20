@@ -24,7 +24,13 @@ export default function ClubModal({ onClose, onSuccess }: ClubModalProps) {
     setLoading(true);
 
     try {
-      await clubApi.create(formData);
+      await clubApi.create({
+        name: formData.name,
+        city: formData.city,
+        contact_person: formData.contact_person_name,
+        contact_phone: formData.contact_person_phone,
+        contact_email: formData.contact_person_email,
+      });
       onSuccess();
     } catch (error) {
       console.error("Kulüp oluşturulurken hata:", error);

@@ -53,7 +53,9 @@ export default function AthleteImportModal({
       const workbook = XLSX.read(data, { type: "array" });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+        worksheet
+      );
 
       if (jsonData.length === 0) {
         throw new Error("Excel dosyası boş veya geçersiz format");
@@ -61,7 +63,7 @@ export default function AthleteImportModal({
 
       const athletes: ImportedAthlete[] = [];
 
-      jsonData.forEach((row: any, index: number) => {
+      jsonData.forEach((row, index: number) => {
         const rowNumber = index + 2; // Excel'de satır numarası (header + 1)
 
         // Sütun sırasına göre veri al (1. sütun: Ad, 2. sütun: Soyad, 3. sütun: Doğum Yılı)

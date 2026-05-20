@@ -340,7 +340,7 @@ export default function DataEntryPage() {
                   onClick={() => router.push("/dashboard")}
                   className="mt-4 text-blue-600 hover:text-blue-700"
                 >
-                  Dashboard'a git
+                  Dashboard&apos;a git
                 </button>
               </div>
             ) : (

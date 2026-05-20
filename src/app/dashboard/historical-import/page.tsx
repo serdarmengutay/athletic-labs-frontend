@@ -18,6 +18,14 @@ interface ImportResult {
   failed: number;
 }
 
+interface ApiError {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+}
+
 export default function HistoricalImportPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,10 +61,11 @@ export default function HistoricalImportPage() {
       });
 
       setResult(response.data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Upload error:", err);
+      const apiError = err as ApiError;
       setError(
-        err.response?.data?.message || "Dosya yüklenirken bir hata oluştu"
+        apiError.response?.data?.message || "Dosya yüklenirken bir hata oluştu"
       );
     } finally {
       setIsUploading(false);

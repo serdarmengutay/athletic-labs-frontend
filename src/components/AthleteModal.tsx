@@ -60,7 +60,7 @@ export default function AthleteModal({
       const athleteData = {
         first_name: formData.first_name.trim(),
         last_name: formData.last_name.trim(),
-        birth_date: formData.birth_date,
+        birth_year: new Date(formData.birth_date).getFullYear(),
         height: parseFloat(formData.height),
         weight: parseFloat(formData.weight),
         club_id: formData.club_id, // UUID string olarak gönder
@@ -79,14 +79,14 @@ export default function AthleteModal({
 
       if (error && typeof error === "object" && "response" in error) {
         // Backend'den gelen hata
-        const axiosError: any = error as {
+        const axiosError = error as {
           response?: { data?: { message?: string }; status?: number };
         };
-        console.error("Backend hata yanıtı:", axiosError.response.data);
-        console.error("HTTP durum kodu:", axiosError.response.status);
-        errorMessage = `Backend hatası (${axiosError.response.status}): ${
-          axiosError.response.data?.message ||
-          axiosError.response.data ||
+        console.error("Backend hata yanıtı:", axiosError.response?.data);
+        console.error("HTTP durum kodu:", axiosError.response?.status);
+        errorMessage = `Backend hatası (${axiosError.response?.status}): ${
+          axiosError.response?.data?.message ||
+          axiosError.response?.data ||
           "Bilinmeyen hata"
         }`;
       } else if (error && typeof error === "object" && "request" in error) {

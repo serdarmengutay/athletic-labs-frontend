@@ -1,316 +1,323 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { X, Camera, AlertCircle, CheckCircle } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertCircle, Camera, CheckCircle, Keyboard, Loader2, X } from "lucide-react";
 import { BrowserMultiFormatReader } from "@zxing/library";
 
 interface QRScannerProps {
   onScan: (data: string) => void;
   onClose: () => void;
   isOpen: boolean;
+  title?: string;
+  description?: string;
+  manualLabel?: string;
+  manualPlaceholder?: string;
+  manualButtonLabel?: string;
 }
 
-export default function QRScanner({ onScan, onClose, isOpen }: QRScannerProps) {
-  const [error, setError] = useState<string>("");
+interface BrowserError {
+  name?: string;
+  message?: string;
+}
+
+const getBrowserError = (error: unknown): BrowserError =>
+  error instanceof Error ? error : {};
+
+export default function QRScanner({
+  onScan,
+  onClose,
+  isOpen,
+  title = "QR Kod Tarayıcı",
+  description = "QR kodu kameraya gösterin",
+  manualLabel = "Kamera çalışmazsa QR bağlantısını manuel girin:",
+  manualPlaceholder = "QR kod verisini veya URL'yi buraya yapıştırın...",
+  manualButtonLabel = "QR Verisini İşle",
+}: QRScannerProps) {
+  const [error, setError] = useState("");
   const [isScanning, setIsScanning] = useState(false);
-  const [hasCamera, setHasCamera] = useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedDevice, setSelectedDevice] = useState<string>("");
+  const [selectedDevice, setSelectedDevice] = useState("");
+  const [manualValue, setManualValue] = useState("");
+  const [showManualFallback, setShowManualFallback] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      checkCameraAvailability();
-    }
-    return () => {
-      stopScanning();
-    };
-  }, [isOpen]);
-
-  const checkCameraAvailability = async () => {
-    try {
-      console.log("Kamera kontrolü başlatılıyor...");
-
-      // Önce cihazları listele (izin olmadan)
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      console.log("Tüm cihazlar:", devices);
-
-      const videoDevices = devices.filter(
-        (device) => device.kind === "videoinput"
-      );
-      console.log("Video cihazları:", videoDevices);
-
-      if (videoDevices.length === 0) {
-        setHasCamera(false);
-        setError("Kamera bulunamadı");
-        return;
-      }
-
-      // Kamera iznini iste
-      console.log("Kamera izni isteniyor...");
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          deviceId: videoDevices[0].deviceId,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      });
-
-      console.log("Kamera stream alındı:", stream);
-
-      // Stream'i kapat
-      stream.getTracks().forEach((track) => {
-        console.log("Track kapatılıyor:", track.label);
-        track.stop();
-      });
-
-      setDevices(videoDevices);
-      setHasCamera(true);
-      setSelectedDevice(videoDevices[0].deviceId);
-      console.log("Kamera başarıyla ayarlandı:", videoDevices[0].label);
-    } catch (err: any) {
-      console.error("Kamera kontrolü hatası:", err);
-      setHasCamera(false);
-
-      if (err.name === "NotAllowedError") {
-        setError(
-          "Kamera erişimi reddedildi. Lütfen tarayıcı ayarlarından kamera iznini verin."
-        );
-      } else if (err.name === "NotFoundError") {
-        setError("Kamera bulunamadı. Bu cihazda kamera yok.");
-      } else if (err.name === "NotSupportedError") {
-        setError("Bu tarayıcı kamera özelliğini desteklemiyor.");
-      } else if (err.name === "NotReadableError") {
-        setError(
-          "Kamera kullanımda. Başka bir uygulama kamera kullanıyor olabilir."
-        );
-      } else {
-        setError("Kamera erişimi hatası: " + err.message);
-      }
-    }
-  };
-
-  const startScanning = async () => {
-    if (!hasCamera || !selectedDevice) {
-      setError("Kamera seçilmedi");
-      return;
-    }
-
-    try {
-      setError("");
-      setIsScanning(true);
-
-      console.log("QR tarama başlatılıyor...");
-      console.log("Seçilen cihaz:", selectedDevice);
-
-      const reader = new BrowserMultiFormatReader();
-      readerRef.current = reader;
-
-      // Video element'ini kontrol et
-      if (!videoRef.current) {
-        throw new Error("Video element bulunamadı");
-      }
-
-      console.log("Video element bulundu, kamera başlatılıyor...");
-
-      // ZXing reader'ı yapılandır
-      const hints = new Map();
-      hints.set(2, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]); // Barcode formats
-
-      const result = await reader.decodeFromVideoDevice(
-        selectedDevice,
-        videoRef.current,
-        (result, error) => {
-          if (result) {
-            console.log("QR kod okundu:", result.getText());
-            handleScan(result.getText());
-          }
-          if (error && error.name !== "NotFoundException") {
-            console.error("QR tarama hatası:", error);
-            setError("QR kod okunamadı: " + error.message);
-          }
-        }
-      );
-
-      console.log("QR tarama başarıyla başlatıldı");
-    } catch (err: any) {
-      console.error("Kamera başlatma hatası:", err);
-      setError("Kamera başlatılamadı: " + err.message);
-      setIsScanning(false);
-    }
-  };
-
-  const stopScanning = () => {
+  const stopScanning = useCallback(() => {
     if (readerRef.current) {
       readerRef.current.reset();
       readerRef.current = null;
     }
     setIsScanning(false);
-  };
+  }, []);
 
-  const handleScan = (data: string) => {
-    if (data) {
+  const handleScan = useCallback(
+    (data: string) => {
+      const cleanData = data.trim();
+      if (!cleanData) return;
       stopScanning();
-      onScan(data);
-    }
-  };
+      onScan(cleanData);
+    },
+    [onScan, stopScanning]
+  );
 
-  const handleError = (error: Error) => {
-    setError(error.message);
-    setIsScanning(false);
+  const startScanning = useCallback(
+    async (deviceId: string) => {
+      if (!deviceId) {
+        setError("Kamera seçilemedi.");
+        return;
+      }
+
+      try {
+        setError("");
+        setIsScanning(true);
+
+        if (!videoRef.current) {
+          throw new Error("Video alanı hazır değil. Lütfen tekrar deneyin.");
+        }
+
+        const reader = new BrowserMultiFormatReader();
+        readerRef.current = reader;
+        await reader.decodeFromVideoDevice(
+          deviceId,
+          videoRef.current,
+          (result, scanError) => {
+            if (result) {
+              handleScan(result.getText());
+            }
+            if (scanError && scanError.name !== "NotFoundException") {
+              setError("QR kod okunamadı. Kodu kameraya biraz daha net gösterin.");
+            }
+          }
+        );
+      } catch (err: unknown) {
+        const browserError = getBrowserError(err);
+        setError(
+          "Kamera başlatılamadı. Tablet/telefonda kamera iznini verin; canlı ortamda sayfa HTTPS üzerinden açılmalı. " +
+            (browserError.message || "")
+        );
+        setShowManualFallback(true);
+        setIsScanning(false);
+      }
+    },
+    [handleScan]
+  );
+
+  const prepareAndStartCamera = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Bu tarayıcı kamera ile QR okumayı desteklemiyor.");
+      setShowManualFallback(true);
+      return;
+    }
+
+    setIsPreparing(true);
+    setError("");
+    stopScanning();
+
+    try {
+      const initialDevices = await navigator.mediaDevices.enumerateDevices();
+      const initialVideoDevices = initialDevices.filter(
+        (device) => device.kind === "videoinput"
+      );
+
+      const permissionStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+      permissionStream.getTracks().forEach((track) => track.stop());
+
+      const refreshedDevices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = refreshedDevices.filter(
+        (device) => device.kind === "videoinput"
+      );
+      const availableDevices =
+        videoDevices.length > 0 ? videoDevices : initialVideoDevices;
+
+      if (availableDevices.length === 0) {
+        throw new Error("Bu cihazda kamera bulunamadı.");
+      }
+
+      const rearCamera =
+        availableDevices.find((device) =>
+          /back|rear|environment|arka/i.test(device.label)
+        ) || availableDevices[0];
+
+      setDevices(availableDevices);
+      setSelectedDevice(rearCamera.deviceId);
+      requestAnimationFrame(() => startScanning(rearCamera.deviceId));
+    } catch (err: unknown) {
+      const browserError = getBrowserError(err);
+
+      if (browserError.name === "NotAllowedError") {
+        setError(
+          "Kamera izni reddedildi. Tarayıcı adres çubuğundan kamera iznini açıp tekrar deneyin."
+        );
+      } else if (browserError.name === "NotFoundError") {
+        setError("Bu cihazda kullanılabilir kamera bulunamadı.");
+      } else if (browserError.name === "NotReadableError") {
+        setError("Kamera başka bir uygulama tarafından kullanılıyor olabilir.");
+      } else if (!window.isSecureContext) {
+        setError(
+          "Kamera erişimi için sayfa HTTPS veya localhost üzerinden açılmalı."
+        );
+      } else {
+        setError(browserError.message || "Kamera erişimi başlatılamadı.");
+      }
+      setShowManualFallback(true);
+    } finally {
+      setIsPreparing(false);
+    }
+  }, [startScanning, stopScanning]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      stopScanning();
+      return;
+    }
+
+    setManualValue("");
+    setShowManualFallback(false);
+    prepareAndStartCamera();
+
+    return () => {
+      stopScanning();
+    };
+  }, [isOpen, prepareAndStartCamera, stopScanning]);
+
+  const handleDeviceChange = (deviceId: string) => {
+    setSelectedDevice(deviceId);
+    stopScanning();
+    requestAnimationFrame(() => startScanning(deviceId));
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-semibold text-gray-900">
-            QR Kod Tarayıcı
-          </h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-700 bg-[#0b1413] text-slate-100 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-semibold">{title}</h2>
+            <p className="mt-1 text-sm text-slate-400">{description}</p>
+          </div>
           <button
             onClick={() => {
               stopScanning();
               onClose();
             }}
-            className="text-gray-400 hover:text-gray-600"
+            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+            aria-label="QR tarayıcıyı kapat"
           >
-            <X className="h-6 w-6" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="p-4">
-          {!hasCamera ? (
-            <div className="text-center py-8">
-              <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Kamera Bulunamadı
-              </h3>
-              <p className="text-sm text-gray-600 mb-4">
-                {error || "Bu cihazda kamera bulunamadı veya erişim reddedildi"}
-              </p>
-              <button
-                onClick={checkCameraAvailability}
-                className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
-              >
-                Tekrar Dene
-              </button>
-            </div>
-          ) : !isScanning ? (
-            <div className="text-center py-8">
-              <Camera className="h-16 w-16 text-blue-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                QR Kod Taramaya Hazır
-              </h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Sporcu QR kodunu kameraya gösterin
-              </p>
-
-              {devices.length > 1 && (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kamera Seçin:
-                  </label>
-                  <select
-                    value={selectedDevice}
-                    onChange={(e) => setSelectedDevice(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    {devices.map((device) => (
-                      <option key={device.deviceId} value={device.deviceId}>
-                        {device.label ||
-                          `Kamera ${device.deviceId.slice(0, 8)}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <button
-                onClick={startScanning}
-                className="bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 flex items-center space-x-2 mx-auto"
-              >
-                <Camera className="h-5 w-5" />
-                <span>Tarayıcıyı Başlat</span>
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="relative bg-black rounded-lg h-64 overflow-hidden">
-                <video
-                  ref={videoRef}
-                  className="w-full h-full object-cover"
-                  autoPlay
-                  playsInline
-                  muted
-                />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="border-2 border-white border-dashed w-48 h-48 rounded-lg flex items-center justify-center">
-                    <Camera className="h-12 w-12 text-white opacity-50" />
-                  </div>
-                </div>
+        <div className="space-y-4 p-5">
+          <div className="relative h-80 overflow-hidden rounded-xl border border-slate-700 bg-black">
+            <video
+              ref={videoRef}
+              className={`h-full w-full object-cover ${
+                isScanning ? "opacity-100" : "opacity-25"
+              }`}
+              autoPlay
+              playsInline
+              muted
+            />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="relative h-48 w-48 rounded-2xl border-2 border-[#e4fc55]/90">
+                <div className="absolute -left-1 -top-1 h-8 w-8 border-l-4 border-t-4 border-[#e4fc55]" />
+                <div className="absolute -right-1 -top-1 h-8 w-8 border-r-4 border-t-4 border-[#e4fc55]" />
+                <div className="absolute -bottom-1 -left-1 h-8 w-8 border-b-4 border-l-4 border-[#e4fc55]" />
+                <div className="absolute -bottom-1 -right-1 h-8 w-8 border-b-4 border-r-4 border-[#e4fc55]" />
               </div>
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <div className="flex items-center space-x-2">
-                    <AlertCircle className="h-5 w-5 text-red-500" />
-                    <span className="text-red-700 text-sm">{error}</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="text-center">
-                <p className="text-sm text-gray-600 mb-2">
-                  QR kodu kameraya doğru tutun
+            </div>
+            {!isScanning && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 text-center">
+                {isPreparing ? (
+                  <Loader2 className="h-10 w-10 animate-spin text-[#e4fc55]" />
+                ) : (
+                  <Camera className="h-12 w-12 text-[#e4fc55]" />
+                )}
+                <p className="text-sm font-medium text-slate-100">
+                  {isPreparing ? "Kamera açılıyor..." : "Kamera hazır değil"}
                 </p>
-                <button
-                  onClick={stopScanning}
-                  className="bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600"
-                >
-                  Taramayı Durdur
-                </button>
               </div>
+            )}
+          </div>
+
+          {devices.length > 1 && (
+            <label className="block text-sm text-slate-300">
+              Kamera
+              <select
+                value={selectedDevice}
+                onChange={(event) => handleDeviceChange(event.target.value)}
+                className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-[#e4fc55]"
+              >
+                {devices.map((device, index) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label || `Kamera ${index + 1}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {error && (
+            <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+              <AlertCircle className="mt-0.5 h-5 w-5 flex-none text-amber-300" />
+              <span>{error}</span>
             </div>
           )}
 
-          {/* Manuel QR Data Input - Fallback */}
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <p className="text-sm text-gray-600 mb-3 text-center">
-              Veya QR kod verisini manuel olarak girin:
-            </p>
-            <div className="space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={prepareAndStartCamera}
+              disabled={isPreparing}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-[#e4fc55] hover:bg-white/10 disabled:opacity-60"
+            >
+              <Camera className="h-4 w-4" />
+              Kamerayı Tekrar Aç
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowManualFallback((value) => !value)}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-800"
+            >
+              <Keyboard className="h-4 w-4" />
+              Manuel URL
+            </button>
+          </div>
+
+          {showManualFallback && (
+            <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/70 p-4">
+              <p className="text-sm text-slate-300">{manualLabel}</p>
               <input
                 type="text"
-                placeholder="QR kod verisini buraya yapıştırın..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                onKeyPress={(e) => {
-                  if (e.key === "Enter") {
-                    const value = (e.target as HTMLInputElement).value.trim();
-                    if (value) {
-                      handleScan(value);
-                    }
+                value={manualValue}
+                placeholder={manualPlaceholder}
+                onChange={(event) => setManualValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    handleScan(manualValue);
                   }
                 }}
+                className="w-full rounded-lg border border-slate-700 bg-[#07100f] px-3 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-[#e4fc55]"
               />
               <button
-                onClick={() => {
-                  const input = document.querySelector(
-                    'input[type="text"]'
-                  ) as HTMLInputElement;
-                  if (input && input.value.trim()) {
-                    handleScan(input.value.trim());
-                  }
-                }}
-                className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center space-x-2"
+                type="button"
+                onClick={() => handleScan(manualValue)}
+                disabled={!manualValue.trim()}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#e4fc55] px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
                 <CheckCircle className="h-4 w-4" />
-                <span>QR Verisini İşle</span>
+                {manualButtonLabel}
               </button>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

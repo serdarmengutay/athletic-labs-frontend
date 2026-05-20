@@ -1,25 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
 import {
-  Play,
-  Users,
-  Trophy,
-  BarChart3,
-  Calendar,
   ArrowRight,
-  CheckCircle,
+  CalendarDays,
   ClipboardList,
-  LogOut,
+  FileSpreadsheet,
   Search,
   Upload,
+  Users,
 } from "lucide-react";
-import { clubApi, athleteApi, testApi, mvpTestSessionApi } from "@/lib/api";
-import { Club, Athlete, TestSession } from "@/types";
 import * as XLSX from "xlsx";
+import AppShell from "@/components/AppShell";
+import { athleteApi, clubApi, mvpTestSessionApi } from "@/lib/api";
 
 interface ParsedAthlete {
   fullName: string;
@@ -29,14 +23,26 @@ interface ParsedAthlete {
   athleteTestId?: string;
 }
 
+interface MvpSession {
+  id: string;
+  clubName: string;
+  clubResponsibleName: string;
+  city: string;
+  sportType: string;
+  testDate: string;
+  status: "draft" | "in_progress" | "completed";
+  totalAthletes: number;
+  completedAthletes: number;
+}
+
 export default function Home() {
   const router = useRouter();
-  const [clubs, setClubs] = useState<Club[]>([]);
-  const [athletes, setAthletes] = useState<Athlete[]>([]);
-  const [testSessions, setTestSessions] = useState<TestSession[]>([]);
+  const [clubCount, setClubCount] = useState(0);
+  const [athleteCount, setAthleteCount] = useState(0);
+  const [sessions, setSessions] = useState<MvpSession[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Test Oturumu Form State
+  const [submitting, setSubmitting] = useState(false);
+  const [parsedAthletes, setParsedAthletes] = useState<ParsedAthlete[]>([]);
   const [formData, setFormData] = useState({
     clubName: "",
     clubResponsible: "",
@@ -47,73 +53,91 @@ export default function Home() {
     testDate: "",
   });
 
-  // Sporcu Import State
-  const [parsedAthletes, setParsedAthletes] = useState<ParsedAthlete[]>([]);
-
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [clubsRes, athletesRes, sessionsRes] = await Promise.all([
+          clubApi.getAll(),
+          athleteApi.getAll(),
+          mvpTestSessionApi.getAll(),
+        ]);
+        setClubCount(clubsRes.data?.data?.length || 0);
+        setAthleteCount(athletesRes.data?.data?.length || 0);
+        setSessions(sessionsRes.data?.data || []);
+      } catch (error) {
+        console.error("Ana ekran verileri yüklenemedi:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [clubsRes, athletesRes, testSessionsRes] = await Promise.all([
-        clubApi.getAll(),
-        athleteApi.getAll(),
-        testApi.getAllSessions(),
-      ]);
+  const activeSessionCount = sessions.filter(
+    (session) => session.status !== "completed"
+  ).length;
 
-      setClubs(clubsRes.data.data);
-      setAthletes(athletesRes.data.data);
-      setTestSessions(testSessionsRes.data.data);
-    } catch (error) {
-      console.error("Veri yüklenirken hata:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const selectedBirthYears = useMemo(() => {
+    const years = parsedAthletes
+      .map((athlete) => athlete.birthYear)
+      .filter((year): year is number => Boolean(year));
+    return [...new Set(years)].sort((a, b) => b - a);
+  }, [parsedAthletes]);
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      router.push("/login");
-    } catch (error) {
-      console.error("Çıkış yapılırken hata:", error);
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
+  const handleInputChange = (
+    event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = event.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const extractBirthYear = (birthDate: string): number | undefined => {
     const parts = birthDate.split(/[./-]/).filter(Boolean);
-    const yearPart = parts[parts.length - 1];
-    const year = Number.parseInt(yearPart, 10);
+    const yearPart = parts.find((part) => part.length === 4) || parts.at(-1);
+    const year = Number.parseInt(String(yearPart || ""), 10);
     return Number.isFinite(year) && year > 1900 ? year : undefined;
   };
 
   const normalizeBirthDate = (birthDate: string): string | undefined => {
     const parts = birthDate.split(/[./-]/).filter(Boolean);
     if (parts.length !== 3) return undefined;
-
     const [day, month, year] = parts;
     if (year.length !== 4) return undefined;
-
     return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   };
 
-  const handleSubmitTestSession = async (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("Test Oturumu Verileri:", formData);
-    console.log("İçe Aktarılan Sporcular:", parsedAthletes);
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
+    const reader = new FileReader();
+    reader.onload = (readerEvent) => {
+      const workbook = XLSX.read(readerEvent.target?.result, { type: "binary" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
+      const athletes = rows
+        .slice(1)
+        .filter((row) => row.length >= 2 && row[0])
+        .map((row) => {
+          const birthDate = String(row[1] || "").trim();
+          return {
+            fullName: String(row[0] || "").trim(),
+            birthDate,
+            birthYear: extractBirthYear(birthDate),
+          };
+        });
+      setParsedAthletes(athletes);
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleSubmitTestSession = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (parsedAthletes.length === 0) {
-      alert("Lütfen önce sporcu verilerini yükleyin!");
+      alert("Lütfen önce sporcu listesini yükleyin.");
       return;
     }
-
     if (
       !formData.clubName ||
       !formData.clubResponsible ||
@@ -121,10 +145,11 @@ export default function Home() {
       !formData.sportType ||
       !formData.testDate
     ) {
-      alert("Lütfen kulüp adı, yetkili, şehir, spor dalı ve test tarihini doldurun.");
+      alert("Kulüp, yetkili, şehir, spor dalı ve test tarihini doldurun.");
       return;
     }
 
+    setSubmitting(true);
     try {
       const sessionResponse = await mvpTestSessionApi.create({
         clubName: formData.clubName,
@@ -136,458 +161,272 @@ export default function Home() {
         testDate: formData.testDate,
         notes: `Test oturumu - ${parsedAthletes.length} sporcu`,
       });
-
       const sessionId = sessionResponse.data?.data?.id;
-      if (!sessionId) {
-        throw new Error("Backend session ID döndürmedi.");
-      }
+      if (!sessionId) throw new Error("Backend session ID döndürmedi.");
 
-      console.log("Backend'den alınan Session ID:", sessionId);
-
-      const athletesForImport = parsedAthletes.map((athlete) => ({
-        fullName: athlete.fullName,
-        birthDate: normalizeBirthDate(athlete.birthDate),
-        birthYear: extractBirthYear(athlete.birthDate),
-      }));
-
+      const sessionGender = formData.sportType
+        .toLocaleLowerCase("tr")
+        .includes("kız")
+        ? "female"
+        : "male";
       const importResponse = await mvpTestSessionApi.importAthletes(
         sessionId,
-        athletesForImport
+        parsedAthletes.map((athlete) => ({
+          fullName: athlete.fullName,
+          birthDate: normalizeBirthDate(athlete.birthDate),
+          birthYear: athlete.birthYear,
+          gender: sessionGender as "male" | "female",
+        }))
       );
       const importedAthletes = importResponse.data?.data?.athletes || [];
-      const failedCount = importResponse.data?.data?.failed || 0;
-
-      if (failedCount > 0) {
-        console.warn("Import sırasında bazı sporcular atlandı:", importResponse.data);
-        alert(`${failedCount} sporcu backend'e aktarılamadı. Konsolu kontrol edin.`);
-      }
-
       const athletesWithBackendIds = parsedAthletes.map((athlete, index) => ({
         ...athlete,
-        birthYear: extractBirthYear(athlete.birthDate),
         athleteId: importedAthletes[index]?.athleteId,
         athleteTestId: importedAthletes[index]?.athleteTestId,
       }));
 
       localStorage.setItem("parsedAthletes", JSON.stringify(athletesWithBackendIds));
-      localStorage.setItem(
-        "testSessionName",
-        formData.clubName || "Test Oturumu"
-      );
+      localStorage.setItem("testSessionName", formData.clubName);
       localStorage.setItem("testSessionId", sessionId);
       localStorage.setItem("testSessionDate", formData.testDate);
+      localStorage.setItem("testSessionSportType", formData.sportType);
       localStorage.removeItem("testCompleted");
-
       router.push("/test-data-entry");
-    } catch (error: unknown) {
-      console.error("Backend session oluşturma hatası:", error);
-      const apiMessage =
-        typeof error === "object" && error !== null && "response" in error
-          ? (error as { response?: { data?: { message?: string } } }).response
-              ?.data?.message
-          : undefined;
-      alert(
-        apiMessage ||
-          "Test oturumu backend'de oluşturulamadı. Lütfen backend loglarını kontrol edin."
-      );
+    } catch (error) {
+      console.error("Test oturumu oluşturulamadı:", error);
+      alert("Test oturumu oluşturulamadı. Backend loglarını kontrol edin.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const data = event.target?.result;
-      const workbook = XLSX.read(data, { type: "binary" });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
-
-      // Skip header row if exists, parse rows
-      const athletes: ParsedAthlete[] = jsonData
-        .slice(1) // Skip header
-        .filter((row) => row.length >= 2 && row[0]) // Filter empty rows
-        .map((row) => ({
-          fullName: String(row[0] || "").trim(),
-          birthDate: String(row[1] || "").trim(),
-        }));
-
-      setParsedAthletes(athletes);
-      console.log("Parsed Athletes:", athletes);
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Logout Button - Top Right */}
-      <div className="absolute top-4 right-4">
+    <AppShell
+      title="Test Oturumu Oluştur"
+      subtitle="Kulüp bilgisini girin, sporcu listesini yükleyin ve saha testine hazır çıkın."
+      action={
         <button
-          onClick={handleLogout}
-          className="flex items-center space-x-2 bg-white text-gray-700 px-4 py-2 rounded-lg shadow hover:bg-gray-50 transition-all duration-200"
+          onClick={() => router.push("/dashboard")}
+          className="hidden rounded-xl border border-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:border-[#e4fc55]/70 hover:bg-[#e4fc55]/10 sm:inline-flex"
         >
-          <LogOut className="h-4 w-4" />
-          <span>Çıkış Yap</span>
+          Oturumları Gör
         </button>
-      </div>
-
-      {/* Header */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-12 text-center">
-          <h1 className="text-5xl font-bold text-gray-900 mb-4">
-            Athletic Labs
-          </h1>
-          <p className="text-xl text-gray-600 mb-8">
-            Sporcu Performans Takip Sistemi
-          </p>
-          <button
-            onClick={() => router.push("/scouting")}
-            className="mb-8 inline-flex items-center gap-2 rounded-full bg-gray-900 px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-gray-800"
-          >
-            <Search className="h-4 w-4" />
-            Scouting Ekranını Aç
-          </button>
-
-          {/* Ana İstatistikler */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-center space-x-3">
-                <Trophy className="h-8 w-8 text-blue-600" />
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {clubs.length}
-                  </p>
-                  <p className="text-sm text-gray-600">Kulüp</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-center space-x-3">
-                <Users className="h-8 w-8 text-green-600" />
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {athletes.length}
-                  </p>
-                  <p className="text-sm text-gray-600">Sporcu</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-center space-x-3">
-                <BarChart3 className="h-8 w-8 text-purple-600" />
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {testSessions.length}
-                  </p>
-                  <p className="text-sm text-gray-600">Test Oturumu</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Ana İşlemler */}
-        <div className="space-y-8">
-          {/* Test Oturumu Oluştur - Form */}
-          <div className="bg-white rounded-2xl shadow-xl p-8">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                Test Oturumu Oluştur
-              </h2>
-              <p className="text-lg text-gray-600">
-                Yeni bir test oturumu başlatmak için bilgileri doldurun
-              </p>
-            </div>
-
-            <form onSubmit={handleSubmitTestSession} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Club Name */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kulüp Adı
-                  </label>
-                  <input
-                    type="text"
-                    name="clubName"
-                    value={formData.clubName}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
-                    placeholder="Örn: Galatasaray SK"
-                  />
-                </div>
-
-                {/* Club Responsible */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kulüp Yetkilisi
-                  </label>
-                  <input
-                    type="text"
-                    name="clubResponsible"
-                    value={formData.clubResponsible}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
-                    placeholder="Ad Soyad"
-                  />
-                </div>
-
-                {/* City */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Şehir
-                  </label>
-                  <input
-                    type="text"
-                    name="city"
-                    value={formData.city}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
-                    placeholder="Örn: İstanbul"
-                  />
-                </div>
-
-                {/* Email */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    E-posta
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
-                    placeholder="yetkili@kulup.com"
-                  />
-                </div>
-
-                {/* Phone */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Telefon
-                  </label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
-                    placeholder="0532 XXX XX XX"
-                  />
-                </div>
-
-                {/* Sport Type */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Spor Dalı
-                  </label>
-                  <input
-                    type="text"
-                    name="sportType"
-                    value={formData.sportType}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
-                    placeholder="Örn: Futbol"
-                  />
-                </div>
-
-                {/* Test Date */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Test Tarihi
-                  </label>
-                  <input
-                    type="date"
-                    name="testDate"
-                    value={formData.testDate}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                  />
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <div className="text-center pt-4">
-                <button
-                  type="submit"
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-purple-700 flex items-center justify-center space-x-3 mx-auto transition-all duration-200 text-lg font-semibold"
+      }
+    >
+      <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+        <section className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-3">
+            {[
+              { label: "Kulüp", value: clubCount, icon: ClipboardList },
+              { label: "Sporcu", value: athleteCount, icon: Users },
+              { label: "Aktif Oturum", value: activeSessionCount, icon: CalendarDays },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  key={item.label}
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
                 >
-                  <Play className="h-6 w-6" />
-                  <span>Test Oturumu Başlat</span>
-                  <ArrowRight className="h-6 w-6" />
-                </button>
-              </div>
-            </form>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-[#b8b8bd]">{item.label}</p>
+                      <p className="mt-2 text-3xl font-semibold">{item.value}</p>
+                    </div>
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e4fc55]/12 text-[#e4fc55]">
+                      <Icon className="h-6 w-6" />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          {/* Sporcu Verilerini İçe Aktar */}
-          <div className="bg-white rounded-2xl shadow-xl p-8">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Sporcu Verilerini İçe Aktar
-              </h2>
-              <p className="text-gray-600">
-                Excel veya CSV dosyasından sporcu listesini yükleyin
+          <form
+            onSubmit={handleSubmitTestSession}
+            className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-2xl sm:p-7"
+          >
+            <div className="mb-6 flex flex-col gap-2">
+              <h2 className="text-xl font-semibold">Kulüp ve Oturum Bilgileri</h2>
+              <p className="text-sm text-[#b8b8bd]">
+                Bu bilgiler test günü ekiplerin aynı oturuma doğru şekilde girmesi için kullanılır.
               </p>
             </div>
 
-            {/* File Upload */}
-            <div className="flex justify-center mb-6">
-              <label className="cursor-pointer">
-                <div className="flex items-center space-x-3 bg-green-600 text-white px-6 py-3 rounded-xl hover:bg-green-700 transition-all duration-200">
-                  <Upload className="h-5 w-5" />
-                  <span>Excel/CSV Dosyası Seç</span>
-                </div>
+            <div className="grid gap-5 md:grid-cols-2">
+              {[
+                ["clubName", "Kulüp Adı", "Gençsaray Akademi", "text"],
+                ["clubResponsible", "Kulüp Yetkilisi", "Ad Soyad", "text"],
+                ["city", "Şehir", "İstanbul", "text"],
+                ["email", "İletişim E-postası", "yetkili@kulup.com", "email"],
+                ["phone", "Telefon", "0532 XXX XX XX", "tel"],
+              ].map(([name, label, placeholder, type]) => (
+                <label key={name} className="block">
+                  <span className="text-sm font-medium text-[#d6d6d8]">{label}</span>
+                  <input
+                    type={type}
+                    name={name}
+                    value={formData[name as keyof typeof formData]}
+                    onChange={handleInputChange}
+                    placeholder={placeholder}
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-[#091312] px-4 py-4 text-white outline-none transition placeholder:text-[#6f6f73] focus:border-[#e4fc55]/80"
+                  />
+                </label>
+              ))}
+
+              <label className="block">
+                <span className="text-sm font-medium text-[#d6d6d8]">Spor Dalı</span>
+                <select
+                  name="sportType"
+                  value={formData.sportType}
+                  onChange={handleInputChange}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-[#091312] px-4 py-4 text-white outline-none transition focus:border-[#e4fc55]/80"
+                >
+                  <option value="">Spor dalı seçin</option>
+                  <option value="Futbol">Futbol</option>
+                  <option value="Kız Voleybol">Kız Voleybol</option>
+                </select>
+              </label>
+
+              <label className="block md:col-span-2">
+                <span className="text-sm font-medium text-[#d6d6d8]">Test Tarihi</span>
                 <input
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleFileUpload}
-                  className="hidden"
+                  type="date"
+                  name="testDate"
+                  value={formData.testDate}
+                  onChange={handleInputChange}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-[#091312] px-4 py-4 text-white outline-none transition focus:border-[#e4fc55]/80"
                 />
               </label>
             </div>
 
-            {/* Preview Table */}
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-[#b8b8bd]">
+                {parsedAthletes.length > 0
+                  ? `${parsedAthletes.length} sporcu hazır`
+                  : "Önce Excel/CSV sporcu listesi yükleyin"}
+              </div>
+              <button
+                type="submit"
+                disabled={submitting || parsedAthletes.length === 0}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#e4fc55] px-6 py-4 text-sm font-bold text-[#070e0e] transition hover:bg-white disabled:cursor-not-allowed disabled:bg-[#6f6f73] disabled:text-[#070e0e]/70"
+              >
+                {submitting ? "Oluşturuluyor..." : "Oturumu Başlat"}
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <aside className="space-y-6">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e4fc55]/12 text-[#e4fc55]">
+                <FileSpreadsheet className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="font-semibold">Sporcu Listesi</h2>
+                <p className="text-sm text-[#b8b8bd]">Ad Soyad, Doğum Tarihi</p>
+              </div>
+            </div>
+
+            <label className="block cursor-pointer rounded-2xl border border-dashed border-[#e4fc55]/40 bg-[#e4fc55]/8 p-5 text-center transition hover:bg-[#e4fc55]/12">
+              <Upload className="mx-auto h-7 w-7 text-[#e4fc55]" />
+              <p className="mt-3 text-sm font-semibold">Excel/CSV Dosyası Seç</p>
+              <p className="mt-1 text-xs text-[#b8b8bd]">İlk sütun ad soyad, ikinci sütun doğum tarihi</p>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+            </label>
+
             {parsedAthletes.length > 0 && (
-              <div className="overflow-x-auto">
-                <p className="text-sm text-gray-600 mb-3">
-                  {parsedAthletes.length} sporcu bulundu
-                </p>
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="text-left px-4 py-3 font-semibold text-gray-700 border-b">
-                        #
-                      </th>
-                      <th className="text-left px-4 py-3 font-semibold text-gray-700 border-b">
-                        Ad Soyad
-                      </th>
-                      <th className="text-left px-4 py-3 font-semibold text-gray-700 border-b">
-                        Doğum Tarihi
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {parsedAthletes.map((athlete, index) => (
-                      <tr
-                        key={index}
-                        className="border-b hover:bg-gray-50 transition-colors"
-                      >
-                        <td className="px-4 py-3 text-gray-600">{index + 1}</td>
-                        <td className="px-4 py-3 text-gray-900">
-                          {athlete.fullName}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {athlete.birthDate}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="mt-5 space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {selectedBirthYears.map((year) => (
+                    <span
+                      key={year}
+                      className="rounded-full border border-white/10 px-3 py-1 text-xs text-[#d6d6d8]"
+                    >
+                      {year}
+                    </span>
+                  ))}
+                </div>
+                <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                  {parsedAthletes.slice(0, 12).map((athlete, index) => (
+                    <div
+                      key={`${athlete.fullName}-${index}`}
+                      className="rounded-xl border border-white/10 bg-[#091312] p-3"
+                    >
+                      <p className="truncate text-sm font-medium">{athlete.fullName}</p>
+                      <p className="mt-1 text-xs text-[#b8b8bd]">{athlete.birthDate}</p>
+                    </div>
+                  ))}
+                  {parsedAthletes.length > 12 && (
+                    <p className="text-center text-xs text-[#b8b8bd]">
+                      +{parsedAthletes.length - 12} sporcu daha
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
-          {/* Hızlı Erişim */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Veri Girişi (Tablet) */}
-            <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-200">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
-                  <ClipboardList className="h-6 w-6 text-indigo-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Test Veri Girişi
-                  </h3>
-                  <p className="text-gray-600">Tablet ile veri girişi yapın</p>
-                </div>
-                <button
-                  onClick={() => router.push("/data-entry")}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center space-x-2"
-                >
-                  <span>Giriş</span>
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
+          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-semibold">Son Oturumlar</h2>
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="text-sm font-semibold text-[#e4fc55]"
+              >
+                Tümü
+              </button>
             </div>
-
-            {/* Dashboard */}
-            <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-200">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center">
-                  <BarChart3 className="h-6 w-6 text-teal-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Dashboard
-                  </h3>
-                  <p className="text-gray-600">Test sonuçlarını analiz edin</p>
-                </div>
-                <button
-                  onClick={() => router.push("/dashboard")}
-                  className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 flex items-center space-x-2"
-                >
-                  <span>Görüntüle</span>
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
+            <div className="space-y-3">
+              {loading ? (
+                <p className="text-sm text-[#b8b8bd]">Yükleniyor...</p>
+              ) : sessions.length === 0 ? (
+                <p className="text-sm text-[#b8b8bd]">Henüz oturum yok.</p>
+              ) : (
+                sessions.slice(0, 4).map((session) => (
+                  <button
+                    key={session.id}
+                    onClick={() => {
+                      localStorage.setItem("testSessionId", session.id);
+                      localStorage.setItem("testSessionName", session.clubName);
+                      localStorage.setItem("testSessionDate", session.testDate);
+                      localStorage.setItem("testSessionSportType", session.sportType);
+                      router.push("/test-data-entry");
+                    }}
+                    className="block w-full rounded-2xl border border-white/10 bg-[#091312] p-4 text-left transition hover:border-[#e4fc55]/50"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{session.clubName}</p>
+                        <p className="mt-1 text-xs text-[#b8b8bd]">
+                          {session.sportType} • {new Date(session.testDate).toLocaleDateString("tr-TR")}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-white/8 px-2 py-1 text-xs text-[#d6d6d8]">
+                        {session.completedAthletes}/{session.totalAthletes}
+                      </span>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
-
-          {/* Son Test Oturumları */}
-          {testSessions.length > 0 && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Son Test Oturumları
-              </h3>
-              <div className="space-y-3">
-                {testSessions.slice(0, 3).map((session) => {
-                  const club = clubs.find((c) => c.id === session.club_id);
-                  return (
-                    <div
-                      key={session.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <Calendar className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-gray-900">
-                            {club?.name || "Bilinmeyen Kulüp"}
-                          </h4>
-                          <p className="text-sm text-gray-600">
-                            {new Date(session.test_date).toLocaleDateString(
-                              "tr-TR"
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <CheckCircle className="h-5 w-5 text-green-500" />
-                        <span className="text-sm text-gray-600">
-                          Tamamlandı
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+        </aside>
       </div>
-    </div>
+
+      <button
+        onClick={() => router.push("/scouting")}
+        className="fixed bottom-5 right-5 inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-[#091312] px-4 py-3 text-sm font-semibold text-white shadow-2xl transition hover:border-[#e4fc55]/60"
+      >
+        <Search className="h-4 w-4 text-[#e4fc55]" />
+        Scouting
+      </button>
+    </AppShell>
   );
 }

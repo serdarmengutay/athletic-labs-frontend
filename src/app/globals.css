@@ -1,8 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #070e0e;
+  --foreground: #ffffff;
+  --canary: #e4fc55;
+  --woodsmoke: #070e0e;
+  --dove-gray: #6f6f73;
 }
 
 @theme inline {
@@ -22,10 +25,9 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-/* Input text rengi düzeltmesi */
 input[type="text"],
 input[type="email"],
 input[type="tel"],
@@ -34,7 +36,9 @@ input[type="number"],
 input[type="password"],
 textarea,
 select {
-  color: #000000 !important;
+  color: #ffffff;
+  background: #091312;
+  color-scheme: dark;
 }
 
 input[type="text"]::placeholder,
@@ -42,5 +46,5 @@ input[type="email"]::placeholder,
 input[type="tel"]::placeholder,
 input[type="number"]::placeholder,
 textarea::placeholder {
-  color: #6b7280 !important;
+  color: #8d8d91;
 }

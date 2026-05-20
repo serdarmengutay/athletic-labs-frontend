@@ -70,13 +70,13 @@ export default function TestQRPage() {
             Kamera Test Talimatları:
           </h3>
           <ul className="text-sm text-yellow-700 space-y-1">
-            <li>1. "QR Tarayıcıyı Aç" butonuna tıklayın</li>
-            <li>2. Tarayıcı kamera izni isteyecek - "İzin Ver" deyin</li>
+            <li>1. &quot;QR Tarayıcıyı Aç&quot; butonuna tıklayın</li>
+            <li>2. Tarayıcı kamera izni isteyecek - &quot;İzin Ver&quot; deyin</li>
             <li>3. Kamera açılırsa QR kod tarama çalışıyor demektir</li>
             <li>
-              4. Kamera açılmazsa console'da hata mesajlarını kontrol edin
+              4. Kamera açılmazsa console&apos;da hata mesajlarını kontrol edin
             </li>
-            <li>5. "Test QR Verisi Gönder" ile manuel test yapabilirsiniz</li>
+            <li>5. &quot;Test QR Verisi Gönder&quot; ile manuel test yapabilirsiniz</li>
           </ul>
         </div>
 
@@ -85,7 +85,7 @@ export default function TestQRPage() {
             Mac Kamera İpuçları:
           </h3>
           <ul className="text-sm text-blue-700 space-y-1">
-            <li>• Safari veya Chrome kullanın (Firefox'ta sorun olabilir)</li>
+            <li>• Safari veya Chrome kullanın (Firefox&apos;ta sorun olabilir)</li>
             <li>• HTTPS gerekiyor - localhost:3000 kullanın</li>
             <li>
               • Sistem Tercihleri {">"} Güvenlik {">"} Kamera iznini kontrol

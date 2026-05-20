@@ -63,10 +63,10 @@ export default function CoachPanel() {
       // Mock athlete data
       setCurrentAthlete({
         id: "athlete-1",
-        uuid: "ATH001",
+        athlete_code: "ATH001",
         first_name: "Mehmet",
         last_name: "Kaya",
-        birth_date: "2000-01-01",
+        birth_year: 2000,
         height: 180,
         weight: 75,
         bmi: 23.1,

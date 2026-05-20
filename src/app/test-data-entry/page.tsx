@@ -17,19 +17,23 @@ import {
   AlertTriangle,
   X,
   Download,
+  ScanLine,
 } from "lucide-react";
 import { mvpTestSessionApi } from "@/lib/api";
+import QRScanner from "@/components/QRScanner";
+import {
+  getSportTestConfig,
+  MeasurementKey,
+  MeasurementFieldConfig,
+} from "@/lib/sportTestConfig";
+import {
+  getQueuedMeasurementCount,
+  getQueuedMeasurementSaves,
+  queueMeasurementSave,
+  removeQueuedMeasurementSave,
+} from "@/lib/offlineMeasurements";
 
-interface Measurements {
-  height?: number;
-  weight?: number;
-  flexibility?: number;
-  sprint30m?: number;
-  sprint30mSecond?: number;
-  agility?: number;
-  verticalJump?: number;
-  passCount?: number;
-}
+type Measurements = Partial<Record<MeasurementKey, number>>;
 
 interface ParsedAthlete {
   fullName: string;
@@ -38,36 +42,43 @@ interface ParsedAthlete {
   athleteId?: string;
   athleteTestId?: string;
   measurements?: Measurements;
+  source?: "backend" | "local";
+  status?: "active" | "absent" | "skipped";
+}
+
+interface SessionAthleteResponseItem {
+  athleteTestId: string;
+  athleteId?: string;
+  fullName: string;
+  birthDate?: string | null;
+  birthYear: number;
+  measurement?: Measurements | null;
+  status?: "active" | "absent" | "skipped";
 }
 
 type ViewState = "list" | "detail";
 
-const REQUIRED_FIELDS: { key: keyof Measurements; label: string }[] = [
-  { key: "height", label: "Boy" },
-  { key: "weight", label: "Kilo" },
-  { key: "flexibility", label: "Esneklik" },
-  { key: "sprint30m", label: "30m Sprint 1" },
-  { key: "sprint30mSecond", label: "30m Sprint 2" },
-  { key: "agility", label: "Çeviklik" },
-  { key: "verticalJump", label: "Dikey Sıçrama" },
-  { key: "passCount", label: "Pas" },
-];
-
 const getCompletionStatus = (
+  fields: MeasurementFieldConfig[],
   measurements?: Measurements
 ): "not_started" | "partial" | "completed" => {
   if (!measurements) return "not_started";
-  const filledCount = REQUIRED_FIELDS.filter(
+  const requiredFields = fields.filter((field) => field.required);
+  const filledCount = requiredFields.filter(
     (f) => measurements[f.key] !== undefined && measurements[f.key] !== null
   ).length;
   if (filledCount === 0) return "not_started";
-  if (filledCount === REQUIRED_FIELDS.length) return "completed";
+  if (filledCount === requiredFields.length) return "completed";
   return "partial";
 };
 
-const getMissingFields = (measurements?: Measurements): string[] => {
-  if (!measurements) return REQUIRED_FIELDS.map((f) => f.label);
-  return REQUIRED_FIELDS.filter(
+const getMissingFields = (
+  fields: MeasurementFieldConfig[],
+  measurements?: Measurements
+): string[] => {
+  const requiredFields = fields.filter((field) => field.required);
+  if (!measurements) return requiredFields.map((f) => f.label);
+  return requiredFields.filter(
     (f) => measurements[f.key] === undefined || measurements[f.key] === null
   ).map((f) => f.label);
 };
@@ -83,17 +94,39 @@ export default function TestDataEntryPage() {
     {}
   );
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "synced" | "queued">(
+    "idle"
+  );
   const [athleteChangeAnim, setAthleteChangeAnim] = useState(false);
   const [isTestCompleted, setIsTestCompleted] = useState(false);
   const [showMissingModal, setShowMissingModal] = useState(false);
   const [testSessionName, setTestSessionName] = useState("");
   const [testSessionDate, setTestSessionDate] = useState("");
+  const [testSessionSportType, setTestSessionSportType] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({
     current: 0,
     total: 0,
   });
   const [testSessionId, setTestSessionId] = useState<string | null>(null);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [absentAthleteKeys, setAbsentAthleteKeys] = useState<string[]>([]);
+  const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [quickAddForm, setQuickAddForm] = useState({
+    fullName: "",
+    birthDate: "",
+  });
+  const [xOneQrUrl, setXOneQrUrl] = useState("");
+  const [isImportingXOne, setIsImportingXOne] = useState(false);
+  const [showXOneScanner, setShowXOneScanner] = useState(false);
+  const [showXOneUrlFallback, setShowXOneUrlFallback] = useState(false);
+  const sportConfig = useMemo(
+    () => getSportTestConfig(testSessionSportType),
+    [testSessionSportType]
+  );
+  const testFields = sportConfig.fields;
+  const sessionGender: "male" | "female" =
+    sportConfig.id === "volleyball_girls" ? "female" : "male";
 
   useEffect(() => {
     const stored = localStorage.getItem("parsedAthletes");
@@ -123,17 +156,98 @@ export default function TestDataEntryPage() {
     if (sessionName) setTestSessionName(sessionName);
     const sessionDate = localStorage.getItem("testSessionDate");
     if (sessionDate) setTestSessionDate(sessionDate);
+    const sessionSportType = localStorage.getItem("testSessionSportType");
+    if (sessionSportType) setTestSessionSportType(sessionSportType);
     const sessionId = localStorage.getItem("testSessionId");
-    if (sessionId) setTestSessionId(sessionId);
+    if (sessionId) {
+      setTestSessionId(sessionId);
+      loadSessionAthletes(sessionId);
+    }
     const completed = localStorage.getItem("testCompleted");
     if (completed === "true") setIsTestCompleted(true);
+    const absentKeys = localStorage.getItem("absentAthleteKeys");
+    if (absentKeys) setAbsentAthleteKeys(JSON.parse(absentKeys));
+    refreshPendingSyncCount();
+  }, []);
+
+  useEffect(() => {
+    const syncQueuedSaves = async () => {
+      if (!navigator.onLine) return;
+
+      const queuedSaves = await getQueuedMeasurementSaves();
+      for (const queuedSave of queuedSaves) {
+        try {
+          await mvpTestSessionApi.saveMeasurements(
+            queuedSave.athleteTestId,
+            queuedSave.measurements
+          );
+          await removeQueuedMeasurementSave(queuedSave.id);
+        } catch (error) {
+          console.error("Bekleyen ölçüm senkronlanamadı:", error);
+          break;
+        }
+      }
+      refreshPendingSyncCount();
+    };
+
+    syncQueuedSaves();
+    window.addEventListener("online", syncQueuedSaves);
+    return () => window.removeEventListener("online", syncQueuedSaves);
   }, []);
 
   const extractBirthYear = (birthDate: string): number => {
-    const parts = birthDate.split("/");
-    const yearPart = parts[parts.length - 1];
+    const parts = birthDate.split(/[./-]/);
+    const yearPart =
+      parts.find((part) => part.length === 4) || parts.at(-1) || "";
     const year = parseInt(yearPart, 10);
     return isNaN(year) ? 0 : year;
+  };
+
+  const mapBackendAthlete = (
+    athlete: SessionAthleteResponseItem
+  ): ParsedAthlete => ({
+    fullName: athlete.fullName,
+    birthDate:
+      athlete.birthDate?.slice(0, 10) || `${athlete.birthYear || 0}-01-01`,
+    birthYear: athlete.birthYear,
+    athleteId: athlete.athleteId,
+    athleteTestId: athlete.athleteTestId,
+    measurements: athlete.measurement || {},
+    source: "backend",
+    status: athlete.status || "active",
+  });
+
+  const persistAthletes = (nextAthletes: ParsedAthlete[]) => {
+    setAthletes(nextAthletes);
+    localStorage.setItem("parsedAthletes", JSON.stringify(nextAthletes));
+  };
+
+  const getAthleteKey = (athlete: ParsedAthlete) =>
+    athlete.athleteTestId || `${athlete.fullName}-${athlete.birthDate}`;
+
+  const persistAbsentAthleteKeys = (keys: string[]) => {
+    setAbsentAthleteKeys(keys);
+    localStorage.setItem("absentAthleteKeys", JSON.stringify(keys));
+  };
+
+  const refreshPendingSyncCount = async () => {
+    if (typeof window === "undefined") return;
+    setPendingSyncCount(await getQueuedMeasurementCount());
+  };
+
+  const loadSessionAthletes = async (sessionId: string) => {
+    try {
+      const response = await mvpTestSessionApi.getAthletes(sessionId);
+      const backendAthletes = response.data?.data?.athletes;
+      if (!Array.isArray(backendAthletes)) return;
+
+      const mappedAthletes = backendAthletes.map((athlete) =>
+        mapBackendAthlete(athlete as SessionAthleteResponseItem)
+      );
+      persistAthletes(mappedAthletes);
+    } catch (error) {
+      console.error("Backend sporcu listesi yüklenemedi:", error);
+    }
   };
 
   const availableYears = useMemo(() => {
@@ -150,7 +264,9 @@ export default function TestDataEntryPage() {
   }, [availableYears, selectedYear]);
 
   const filteredAthletes = useMemo(() => {
-    let result = athletes;
+    let result = athletes.filter(
+      (athlete) => !absentAthleteKeys.includes(getAthleteKey(athlete))
+    );
     if (selectedYear)
       result = result.filter((a) => a.birthYear === selectedYear);
     if (searchQuery.trim()) {
@@ -162,17 +278,21 @@ export default function TestDataEntryPage() {
       return a.fullName.localeCompare(b.fullName, "tr");
     });
     return result;
-  }, [athletes, selectedYear, searchQuery]);
+  }, [absentAthleteKeys, athletes, selectedYear, searchQuery]);
 
   const selectedAthlete = filteredAthletes[selectedAthleteIndex];
 
-  const completedAthletes = athletes.filter(
-    (a) => getCompletionStatus(a.measurements) === "completed"
+  const activeAthletes = athletes.filter(
+    (athlete) => !absentAthleteKeys.includes(getAthleteKey(athlete))
   );
-  const incompleteAthletes = athletes.filter(
-    (a) => getCompletionStatus(a.measurements) !== "completed"
+  const completedAthletes = activeAthletes.filter(
+    (a) => getCompletionStatus(testFields, a.measurements) === "completed"
   );
-  const allCompleted = incompleteAthletes.length === 0 && athletes.length > 0;
+  const incompleteAthletes = activeAthletes.filter(
+    (a) => getCompletionStatus(testFields, a.measurements) !== "completed"
+  );
+  const allCompleted =
+    incompleteAthletes.length === 0 && activeAthletes.length > 0;
 
   const handleLogout = async () => {
     try {
@@ -213,31 +333,32 @@ export default function TestDataEntryPage() {
       }
       return a;
     });
-    setAthletes(updatedAthletes);
-    localStorage.setItem("parsedAthletes", JSON.stringify(updatedAthletes));
+    persistAthletes(updatedAthletes);
 
     try {
+      const queuedSave = await queueMeasurementSave(
+        selectedAthlete.athleteTestId,
+        currentMeasurements
+      );
       await mvpTestSessionApi.saveMeasurements(
         selectedAthlete.athleteTestId,
         currentMeasurements
       );
+      await removeQueuedMeasurementSave(queuedSave.id);
       console.log("Sporcu backend'e kaydedildi:", {
         ...selectedAthlete,
         measurements: currentMeasurements,
       });
+      setSaveStatus("synced");
       setShowSaveSuccess(true);
       setTimeout(() => setShowSaveSuccess(false), 2000);
+      refreshPendingSyncCount();
     } catch (error: unknown) {
       console.error("Ölçüm kaydetme hatası:", error);
-      const apiMessage =
-        typeof error === "object" && error !== null && "response" in error
-          ? (error as { response?: { data?: { message?: string } } }).response
-              ?.data?.message
-          : undefined;
-      alert(
-        apiMessage ||
-          "Ölçümler backend'e kaydedilemedi. Lütfen tekrar deneyin."
-      );
+      setSaveStatus("queued");
+      setShowSaveSuccess(true);
+      setTimeout(() => setShowSaveSuccess(false), 2500);
+      refreshPendingSyncCount();
     }
   };
 
@@ -275,7 +396,7 @@ export default function TestDataEntryPage() {
 
   const completeTest = async () => {
     setIsExporting(true);
-    setExportProgress({ current: 0, total: athletes.length });
+    setExportProgress({ current: 0, total: activeAthletes.length });
 
     try {
       // Import export utility dynamically
@@ -286,17 +407,23 @@ export default function TestDataEntryPage() {
         );
       }
 
-      for (let i = 0; i < athletes.length; i++) {
-        const athlete = athletes[i];
-        if (!athlete.athleteTestId || !athlete.measurements) {
-          throw new Error(`${athlete.fullName} backend oturumuna bağlı değil.`);
-        }
+      const athletesWithMeasurements = activeAthletes.filter(
+        (athlete) =>
+          athlete.athleteTestId &&
+          athlete.measurements &&
+          Object.keys(athlete.measurements).length > 0
+      );
 
+      for (let i = 0; i < athletesWithMeasurements.length; i++) {
+        const athlete = athletesWithMeasurements[i];
         await mvpTestSessionApi.saveMeasurements(
-          athlete.athleteTestId,
-          athlete.measurements
+          athlete.athleteTestId!,
+          athlete.measurements!
         );
-        setExportProgress({ current: i + 1, total: athletes.length });
+        setExportProgress({
+          current: i + 1,
+          total: athletesWithMeasurements.length,
+        });
       }
 
       const response = await mvpTestSessionApi.calculateReport(testSessionId);
@@ -346,17 +473,154 @@ export default function TestDataEntryPage() {
     }
   };
 
+  const handleMarkAbsent = async (athlete: ParsedAthlete) => {
+    const athleteKey = getAthleteKey(athlete);
+    persistAbsentAthleteKeys([...absentAthleteKeys, athleteKey]);
+    persistAthletes(
+      athletes.map((item) =>
+        getAthleteKey(item) === athleteKey
+          ? { ...item, status: "absent" }
+          : item
+      )
+    );
+
+    if (athlete.athleteTestId) {
+      try {
+        await mvpTestSessionApi.updateAthleteStatus(athlete.athleteTestId, {
+          status: "absent",
+        });
+      } catch (error) {
+        console.error("Gelmedi durumu backend'e yazılamadı:", error);
+      }
+    }
+  };
+
+  const handleQuickAddAthlete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testSessionId || !quickAddForm.fullName || !quickAddForm.birthDate) {
+      return;
+    }
+
+    const birthYear = extractBirthYear(quickAddForm.birthDate);
+    const response = await mvpTestSessionApi.importAthletes(testSessionId, [
+      {
+        fullName: quickAddForm.fullName.trim(),
+        birthDate: quickAddForm.birthDate,
+        birthYear,
+        gender: sessionGender,
+      },
+    ]);
+    const importedAthlete = response.data?.data?.athletes?.[0];
+    if (importedAthlete) {
+      const nextAthlete: ParsedAthlete = {
+        fullName: importedAthlete.fullName || quickAddForm.fullName.trim(),
+        birthDate: quickAddForm.birthDate,
+        birthYear: importedAthlete.birthYear || birthYear,
+        athleteId: importedAthlete.athleteId,
+        athleteTestId: importedAthlete.athleteTestId,
+        measurements: {},
+        source: "backend",
+      };
+      persistAthletes([...athletes, nextAthlete]);
+      setSelectedYear(nextAthlete.birthYear);
+      setQuickAddForm({ fullName: "", birthDate: "" });
+      setShowQuickAddModal(false);
+    }
+  };
+
+  const extractUrlFromQrData = (qrData: string): string => {
+    try {
+      const parsed = JSON.parse(qrData) as {
+        url?: string;
+        qrUrl?: string;
+        link?: string;
+      };
+      return parsed.url || parsed.qrUrl || parsed.link || qrData;
+    } catch {
+      return qrData;
+    }
+  };
+
+  const handleImportXOneQr = async (qrUrl = xOneQrUrl) => {
+    if (!testSessionId || !selectedAthlete?.athleteId || !qrUrl.trim()) {
+      return;
+    }
+
+    setIsImportingXOne(true);
+    try {
+      const response = await mvpTestSessionApi.importXOneQr(testSessionId, {
+        athleteId: selectedAthlete.athleteId,
+        qrUrl: qrUrl.trim(),
+      });
+      const normalized = response.data?.data?.normalized || {};
+      const nextMeasurements: Measurements = {
+        ...currentMeasurements,
+        ...(normalized.height !== undefined && normalized.height !== null
+          ? { height: normalized.height }
+          : {}),
+        ...(normalized.weight !== undefined && normalized.weight !== null
+          ? { weight: normalized.weight }
+          : {}),
+        ...(normalized.flexibility !== undefined &&
+        normalized.flexibility !== null
+          ? { flexibility: normalized.flexibility }
+          : {}),
+        ...(normalized.sprint30m !== undefined && normalized.sprint30m !== null
+          ? { sprint30m: normalized.sprint30m }
+          : {}),
+        ...(normalized.sprint30mSecond !== undefined &&
+        normalized.sprint30mSecond !== null
+          ? { sprint30mSecond: normalized.sprint30mSecond }
+          : {}),
+        ...(normalized.agility !== undefined && normalized.agility !== null
+          ? { agility: normalized.agility }
+          : {}),
+        ...(normalized.verticalJump !== undefined &&
+        normalized.verticalJump !== null
+          ? { verticalJump: normalized.verticalJump }
+          : {}),
+        ...(normalized.passCount !== undefined && normalized.passCount !== null
+          ? { passCount: normalized.passCount }
+          : {}),
+      };
+
+      setCurrentMeasurements(nextMeasurements);
+      const updatedAthletes = athletes.map((athlete) =>
+        getAthleteKey(athlete) === getAthleteKey(selectedAthlete)
+          ? { ...athlete, measurements: nextMeasurements }
+          : athlete
+      );
+      persistAthletes(updatedAthletes);
+      setXOneQrUrl("");
+      setShowXOneScanner(false);
+      setSaveStatus("synced");
+      setShowSaveSuccess(true);
+      setTimeout(() => setShowSaveSuccess(false), 2000);
+    } catch (error) {
+      console.error("X-One QR import hatası:", error);
+      alert("X-One QR verisi alınamadı. QR URL veya cihaz API yanıtını kontrol edin.");
+    } finally {
+      setIsImportingXOne(false);
+    }
+  };
+
+  const handleXOneQrScan = (qrData: string) => {
+    const qrUrl = extractUrlFromQrData(qrData);
+    setXOneQrUrl(qrUrl);
+    handleImportXOneQr(qrUrl);
+  };
+
   const handleBack = () => {
     if (viewState === "detail") setViewState("list");
     else router.push("/");
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-[#07100f] text-slate-100">
       {/* Floating Status Card */}
-      <div className="fixed top-4 right-4 z-40 bg-white rounded-xl shadow-xl border p-4 min-w-[200px]">
+      <div className="fixed top-4 right-4 z-40 bg-[#0d1716] rounded-xl shadow-xl border p-4 min-w-[200px]">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-semibold text-gray-900 truncate max-w-[140px]">
+          <span className="text-sm font-semibold text-slate-100 truncate max-w-[140px]">
             {testSessionName || "Test Oturumu"}
           </span>
           {isTestCompleted ? (
@@ -364,24 +628,31 @@ export default function TestDataEntryPage() {
               ✓
             </span>
           ) : (
-            <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">
+            <span className="bg-[#e4fc55] text-[#070e0e] text-xs px-2 py-0.5 rounded-full">
               Aktif
             </span>
           )}
         </div>
         <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-600">{athletes.length} sporcu</span>
+          <span className="text-slate-300">{activeAthletes.length} aktif</span>
           <span
             className={`font-bold ${
-              allCompleted ? "text-green-600" : "text-blue-600"
+              allCompleted ? "text-[#e4fc55]" : "text-[#e4fc55]"
             }`}
           >
             {completedAthletes.length}/{athletes.length}
           </span>
         </div>
+        <div className="mt-2 text-xs text-slate-400">
+          {pendingSyncCount > 0
+            ? `${pendingSyncCount} kayıt senkron bekliyor`
+            : saveStatus === "synced"
+            ? "Son kayıt senkron"
+            : "Senkron hazır"}
+        </div>
         {isTestCompleted && (
-          <div className="mt-2 pt-2 border-t text-center">
-            <span className="text-green-600 font-semibold text-sm">
+          <div className="mt-2 pt-2 border-t border-slate-800 text-center">
+            <span className="text-[#e4fc55] font-semibold text-sm">
               Test Tamamlandı
             </span>
           </div>
@@ -389,22 +660,22 @@ export default function TestDataEntryPage() {
       </div>
 
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b sticky top-0 z-30">
+      <header className="bg-[#0d1716]/90 backdrop-blur-sm shadow-sm border-b border-slate-800 sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <button
               onClick={handleBack}
-              className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
+              className="flex items-center space-x-2 text-slate-300 hover:text-slate-100"
             >
               <ArrowLeft className="h-5 w-5" />
               <span className="hidden sm:inline">Geri</span>
             </button>
-            <h1 className="text-lg font-bold text-gray-900">
+            <h1 className="text-lg font-bold text-slate-100">
               {viewState === "list" ? "Test Verisi Girişi" : "Ölçüm Girişi"}
             </h1>
             <button
               onClick={handleLogout}
-              className="text-gray-600 hover:text-gray-900"
+              className="text-slate-300 hover:text-slate-100"
             >
               <LogOut className="h-5 w-5" />
             </button>
@@ -414,14 +685,14 @@ export default function TestDataEntryPage() {
 
       <div className="max-w-6xl mx-auto px-4 py-4">
         {athletes.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl shadow-lg">
-            <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 text-lg mb-4">
+          <div className="text-center py-16 bg-[#0d1716] rounded-2xl shadow-lg">
+            <Users className="h-16 w-16 text-slate-600 mx-auto mb-4" />
+            <p className="text-slate-400 text-lg mb-4">
               Henüz sporcu verisi yüklenmemiş
             </p>
             <button
               onClick={() => router.push("/")}
-              className="text-blue-600 hover:text-blue-700 font-medium"
+              className="text-[#e4fc55] hover:text-white font-medium"
             >
               Ana sayfaya git ve Excel yükle
             </button>
@@ -429,7 +700,7 @@ export default function TestDataEntryPage() {
         ) : viewState === "list" ? (
           <div className="space-y-4">
             {/* Compact Filters Row */}
-            <div className="bg-white rounded-xl shadow-sm border p-3">
+            <div className="bg-[#0d1716] rounded-xl shadow-sm border p-3">
               <div className="flex flex-col lg:flex-row lg:items-center gap-3">
                 {/* Birth Year Tabs */}
                 <div className="flex flex-wrap gap-1.5">
@@ -444,14 +715,14 @@ export default function TestDataEntryPage() {
                         onClick={() => setSelectedYear(year)}
                         className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${
                           isSelected
-                            ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                            : "bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                            ? "bg-[#e4fc55] text-[#070e0e] border-[#e4fc55] shadow-sm"
+                            : "bg-[#0d1716] text-slate-200 border-slate-700 hover:border-[#e4fc55] hover:bg-[#e4fc55]/10"
                         }`}
                       >
                         {year}{" "}
                         <span
                           className={
-                            isSelected ? "text-blue-100" : "text-gray-400"
+                            isSelected ? "text-[#070e0e]/70" : "text-slate-500"
                           }
                         >
                           ({count})
@@ -463,16 +734,23 @@ export default function TestDataEntryPage() {
                 {/* Search */}
                 <div className="flex-1 lg:max-w-xs">
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Sporcu ara..."
-                      className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 text-sm"
+                      className="w-full bg-slate-950 pl-9 pr-3 py-2 border border-slate-700 rounded-lg focus:ring-2 focus:ring-[#e4fc55] focus:border-[#e4fc55] text-slate-100 text-sm"
                     />
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickAddModal(true)}
+                  className="rounded-lg bg-[#e4fc55] px-4 py-2 text-sm font-semibold text-[#070e0e] hover:bg-white"
+                >
+                  Sporcu Ekle
+                </button>
               </div>
             </div>
 
@@ -483,9 +761,9 @@ export default function TestDataEntryPage() {
                   onClick={handleCompleteTest}
                   disabled={isExporting}
                   className={`w-full py-3 rounded-xl font-semibold flex items-center justify-center space-x-2 transition-all ${
-                    allCompleted && !isExporting
-                      ? "bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg hover:shadow-xl"
-                      : "bg-gray-100 text-gray-500 border-2 border-dashed border-gray-300 cursor-not-allowed"
+                    !isExporting
+                       ? "bg-[#e4fc55] text-[#070e0e] shadow-lg hover:bg-white"
+                      : "bg-slate-800 text-slate-400 border-2 border-dashed border-slate-600 cursor-not-allowed"
                   }`}
                 >
                   {isExporting ? (
@@ -499,7 +777,7 @@ export default function TestDataEntryPage() {
                       <span>
                         {allCompleted
                           ? "Testi Tamamla ve Raporları İndir"
-                          : `Testi Tamamla (${incompleteAthletes.length} eksik)`}
+                          : `Eksikleri Gör ve Rapor Al (${incompleteAthletes.length} eksik)`}
                       </span>
                     </>
                   )}
@@ -507,21 +785,21 @@ export default function TestDataEntryPage() {
 
                 {/* Export Progress */}
                 {isExporting && exportProgress.total > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <div className="bg-slate-900/80 border border-slate-700 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-blue-800 font-medium text-sm">
+                      <span className="text-slate-200 font-medium text-sm">
                         Rapor {exportProgress.current} / {exportProgress.total}
                       </span>
-                      <span className="text-blue-600 text-sm">
+                      <span className="text-[#e4fc55] text-sm">
                         {Math.round(
                           (exportProgress.current / exportProgress.total) * 100
                         )}
                         %
                       </span>
                     </div>
-                    <div className="w-full bg-blue-200 rounded-full h-2">
+                    <div className="w-full bg-slate-700 rounded-full h-2">
                       <div
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        className="bg-[#e4fc55] h-2 rounded-full transition-all duration-300"
                         style={{
                           width: `${
                             (exportProgress.current / exportProgress.total) *
@@ -537,13 +815,13 @@ export default function TestDataEntryPage() {
 
             {/* Test Completed Banner */}
             {isTestCompleted && (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center space-x-3">
-                <Trophy className="h-8 w-8 text-green-600" />
+              <div className="bg-[#e4fc55]/10 border border-[#e4fc55]/30 rounded-xl p-4 flex items-center space-x-3">
+                <Trophy className="h-8 w-8 text-[#e4fc55]" />
                 <div>
-                  <p className="font-semibold text-green-800">
+                  <p className="font-semibold text-white">
                     Test Tamamlandı!
                   </p>
-                  <p className="text-sm text-green-600">
+                  <p className="text-sm text-[#e4fc55]">
                     Tüm veriler konsola yazdırıldı
                   </p>
                 </div>
@@ -551,16 +829,21 @@ export default function TestDataEntryPage() {
             )}
 
             {/* Count */}
-            <div className="flex items-center justify-between text-sm text-gray-600 px-1">
+            <div className="flex items-center justify-between text-sm text-slate-300 px-1">
               <span>{selectedYear} doğumlu</span>
-              <span>{filteredAthletes.length} sporcu</span>
+              <span>
+                {filteredAthletes.length} sporcu
+                {absentAthleteKeys.length > 0
+                  ? `, ${absentAthleteKeys.length} gelmedi`
+                  : ""}
+              </span>
             </div>
 
             {/* Athlete List */}
             {filteredAthletes.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-xl shadow-sm border">
-                <Users className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">
+              <div className="text-center py-12 bg-[#0d1716] rounded-xl shadow-sm border">
+                <Users className="h-12 w-12 text-slate-600 mx-auto mb-3" />
+                <p className="text-slate-400">
                   {searchQuery
                     ? "Arama sonucu bulunamadı"
                     : "Sporcu bulunamadı"}
@@ -569,48 +852,70 @@ export default function TestDataEntryPage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {filteredAthletes.map((athlete, index) => {
-                  const status = getCompletionStatus(athlete.measurements);
+                  const status = getCompletionStatus(
+                    testFields,
+                    athlete.measurements
+                  );
                   return (
-                    <button
-                      key={index}
-                      onClick={() => handleAthleteClick(index)}
-                      className={`bg-white rounded-lg shadow-sm border p-3 flex items-center justify-between hover:shadow-md transition-all ${
+                    <div
+                      key={getAthleteKey(athlete)}
+                      className={`bg-[#0d1716] rounded-lg shadow-sm border p-3 transition-all ${
                         status === "completed"
-                          ? "border-green-300 bg-green-50/50"
-                          : "border-gray-200"
+                          ? "border-[#e4fc55]/50 bg-[#e4fc55]/10"
+                          : "border-slate-700"
                       }`}
                     >
-                      <div className="flex items-center space-x-3">
-                        <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                            status === "completed"
-                              ? "bg-green-500"
-                              : status === "partial"
-                              ? "bg-yellow-500"
-                              : "bg-gray-400"
-                          }`}
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleAthleteClick(index)}
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
                         >
-                          {status === "completed" ? (
-                            <Check className="h-5 w-5" />
-                          ) : (
-                            athlete.fullName
-                              .split(" ")
-                              .map((n) => n.charAt(0))
-                              .slice(0, 2)
-                              .join("")
-                          )}
-                        </div>
-                        <div className="text-left">
-                          <p className="font-medium text-gray-900 text-sm">
-                            {athlete.fullName}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {athlete.birthYear}
-                          </p>
-                        </div>
+                          <div
+                            className={`h-10 w-10 flex-none rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                              status === "completed"
+                                ? "bg-green-500"
+                                : status === "partial"
+                                ? "bg-yellow-500"
+                                : "bg-gray-400"
+                            }`}
+                          >
+                            {status === "completed" ? (
+                              <Check className="h-5 w-5" />
+                            ) : (
+                              athlete.fullName
+                                .split(" ")
+                                .map((n) => n.charAt(0))
+                                .slice(0, 2)
+                                .join("")
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-slate-100 text-sm">
+                              {athlete.fullName}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {athlete.birthYear}
+                            </p>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMarkAbsent(athlete)}
+                          className="flex-none rounded-md border border-slate-700 px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:border-red-200 hover:text-red-600"
+                        >
+                          Gelmedi
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAthleteClick(index)}
+                          className="flex-none rounded-md p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
+                          aria-label={`${athlete.fullName} ölçümlerini aç`}
+                        >
+                          <ChevronRight className="h-5 w-5" />
+                        </button>
                       </div>
-                      <ChevronRight className="h-5 w-5 text-gray-400" />
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -621,20 +926,21 @@ export default function TestDataEntryPage() {
           <div className="space-y-4">
             {/* Athlete Header */}
             <div
-              className={`bg-white rounded-xl shadow-sm border p-4 transition-all ${
-                athleteChangeAnim ? "ring-2 ring-blue-400" : ""
+              className={`bg-[#0d1716] rounded-xl shadow-sm border p-4 transition-all ${
+                athleteChangeAnim ? "ring-2 ring-[#e4fc55]" : ""
               }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div
                     className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${
-                      getCompletionStatus(currentMeasurements) === "completed"
+                      getCompletionStatus(testFields, currentMeasurements) ===
+                      "completed"
                         ? "bg-green-500"
-                        : "bg-blue-500"
+                        : "bg-[#e4fc55] text-[#070e0e]"
                     }`}
                   >
-                    {getCompletionStatus(currentMeasurements) ===
+                    {getCompletionStatus(testFields, currentMeasurements) ===
                     "completed" ? (
                       <Check className="h-6 w-6" />
                     ) : (
@@ -646,166 +952,116 @@ export default function TestDataEntryPage() {
                     )}
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-gray-900">
+                    <h2 className="text-lg font-bold text-slate-100">
                       {selectedAthlete?.fullName}
                     </h2>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-slate-300">
                       {selectedAthlete?.birthYear} doğumlu
                     </p>
                   </div>
                 </div>
-                <div className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                <div className="text-sm text-slate-400 bg-slate-800 px-3 py-1 rounded-full">
                   {selectedAthleteIndex + 1}/{filteredAthletes.length}
                 </div>
               </div>
             </div>
 
-            {/* Measurement Inputs - Grouped Rows */}
-            <div className="bg-white rounded-xl shadow-sm border p-4 space-y-4">
-              {/* Row 1: Height, Weight, Flexibility */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    📏 Boy (cm)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={currentMeasurements.height ?? ""}
-                    onChange={(e) =>
-                      handleMeasurementChange("height", e.target.value)
-                    }
-                    placeholder="Boy"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-                    disabled={isTestCompleted}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    ⚖️ Kilo (kg)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={currentMeasurements.weight ?? ""}
-                    onChange={(e) =>
-                      handleMeasurementChange("weight", e.target.value)
-                    }
-                    placeholder="Kilo"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-                    disabled={isTestCompleted}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    🤸 Esneklik (cm)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={currentMeasurements.flexibility ?? ""}
-                    onChange={(e) =>
-                      handleMeasurementChange("flexibility", e.target.value)
-                    }
-                    placeholder="Esneklik"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-                    disabled={isTestCompleted}
-                  />
-                </div>
+            {/* Measurement Inputs - Config Driven */}
+            <div className="bg-[#0d1716] rounded-xl shadow-sm border p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-semibold text-slate-100">
+                  {sportConfig.label} ölçüm alanları
+                </p>
+                <span className="rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-300">
+                  {testFields.length} alan
+                </span>
               </div>
-              {/* Row 2: Sprint 1, Sprint 2 */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    🏃 30m Sprint 1 (sn)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={currentMeasurements.sprint30m ?? ""}
-                    onChange={(e) =>
-                      handleMeasurementChange("sprint30m", e.target.value)
-                    }
-                    placeholder="1. Koşu"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-                    disabled={isTestCompleted}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    🏃 30m Sprint 2 (sn)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={currentMeasurements.sprint30mSecond ?? ""}
-                    onChange={(e) =>
-                      handleMeasurementChange("sprint30mSecond", e.target.value)
-                    }
-                    placeholder="2. Koşu"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-                    disabled={isTestCompleted}
-                  />
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {testFields.map((field) => (
+                  <div key={field.key}>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">
+                      {field.label} ({field.unit})
+                    </label>
+                    <input
+                      type="number"
+                      step={field.step}
+                      value={currentMeasurements[field.key] ?? ""}
+                      onChange={(e) =>
+                        handleMeasurementChange(field.key, e.target.value)
+                      }
+                      placeholder={field.placeholder}
+                      className="w-full bg-slate-950 px-3 py-2.5 border border-slate-700 rounded-lg focus:ring-2 focus:ring-[#e4fc55] text-slate-100"
+                      disabled={isTestCompleted}
+                    />
+                  </div>
+                ))}
               </div>
-              {/* Row 3: Agility, Vertical Jump, Pass */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    🔄 Çeviklik (sn)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={currentMeasurements.agility ?? ""}
-                    onChange={(e) =>
-                      handleMeasurementChange("agility", e.target.value)
-                    }
-                    placeholder="Çeviklik"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-                    disabled={isTestCompleted}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    ⬆️ Dikey Sıçrama (cm)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={currentMeasurements.verticalJump ?? ""}
-                    onChange={(e) =>
-                      handleMeasurementChange("verticalJump", e.target.value)
-                    }
-                    placeholder="Dikey Sıçrama"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-                    disabled={isTestCompleted}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    ⚽ Pas (30 sn)
-                  </label>
-                  <input
-                    type="number"
-                    step="1"
-                    value={currentMeasurements.passCount ?? ""}
-                    onChange={(e) =>
-                      handleMeasurementChange("passCount", e.target.value)
-                    }
-                    placeholder="Pas adedi"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900"
-                    disabled={isTestCompleted}
-                  />
-                </div>
+            </div>
+
+            <div className="bg-[#0d1716] rounded-xl shadow-sm border p-4">
+              <div className="mb-3">
+                <p className="text-sm font-semibold text-slate-100">
+                  Youjiu Health Cihaz Verisi
+                </p>
+                <p className="text-xs text-slate-400">
+                  QR okutulduğunda report_id backend tarafından alınır ve
+                  ölçümler forma işlenir.
+                </p>
               </div>
+              <div className="rounded-xl border border-dashed border-slate-600 bg-slate-900/60 p-5 text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowXOneScanner(true)}
+                  disabled={
+                    isTestCompleted ||
+                    isImportingXOne ||
+                    !selectedAthlete?.athleteId
+                  }
+                  className="mx-auto flex items-center justify-center gap-2 rounded-lg bg-[#e4fc55] px-5 py-3 text-sm font-semibold text-[#070e0e] hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <ScanLine className="h-5 w-5" />
+                  {isImportingXOne ? "Alınıyor..." : "QR Okut"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowXOneUrlFallback((value) => !value)}
+                  className="mt-3 text-xs font-medium text-slate-400 underline"
+                >
+                  QR okunmazsa URL ile ekle
+                </button>
+              </div>
+              {showXOneUrlFallback && (
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="url"
+                    value={xOneQrUrl}
+                    onChange={(event) => setXOneQrUrl(event.target.value)}
+                    placeholder="https://... report_id=..."
+                    className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:ring-2 focus:ring-[#e4fc55]"
+                    disabled={isTestCompleted || isImportingXOne}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleImportXOneQr()}
+                    disabled={
+                      isTestCompleted ||
+                      isImportingXOne ||
+                      !selectedAthlete?.athleteId ||
+                      !xOneQrUrl.trim()
+                    }
+                    className="rounded-lg bg-[#e4fc55] px-4 py-2 text-sm font-semibold text-[#070e0e] hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    URL ile Al
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Save Button */}
             {!isTestCompleted && (
               <button
                 onClick={handleSave}
-                className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold flex items-center justify-center space-x-2 shadow-lg hover:bg-blue-700 transition-all"
+                className="w-full bg-[#e4fc55] text-[#070e0e] py-3 rounded-xl font-semibold flex items-center justify-center space-x-2 shadow-lg hover:bg-white transition-all"
               >
                 <Save className="h-5 w-5" />
                 <span>Kaydet</span>
@@ -814,10 +1070,12 @@ export default function TestDataEntryPage() {
 
             {/* Success Message */}
             {showSaveSuccess && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center space-x-2">
+              <div className="bg-[#e4fc55]/10 border border-[#e4fc55]/30 rounded-lg p-3 flex items-center space-x-2">
                 <Check className="h-5 w-5 text-green-500" />
-                <span className="text-green-700 font-medium text-sm">
-                  Kaydedildi!
+                <span className="text-white font-medium text-sm">
+                  {saveStatus === "queued"
+                    ? "Cihaza kaydedildi, internet gelince senkronlanacak."
+                    : "Kaydedildi!"}
                 </span>
               </div>
             )}
@@ -829,8 +1087,8 @@ export default function TestDataEntryPage() {
                 disabled={selectedAthleteIndex === 0}
                 className={`flex-1 py-3 rounded-xl font-medium flex items-center justify-center space-x-2 transition-all ${
                   selectedAthleteIndex === 0
-                    ? "bg-gray-100 text-gray-400"
-                    : "bg-white text-gray-700 shadow-sm border hover:shadow-md"
+                    ? "bg-slate-800 text-slate-500"
+                    : "bg-[#0d1716] text-slate-200 shadow-sm border hover:shadow-md"
                 }`}
               >
                 <ChevronLeft className="h-5 w-5" />
@@ -841,8 +1099,8 @@ export default function TestDataEntryPage() {
                 disabled={selectedAthleteIndex === filteredAthletes.length - 1}
                 className={`flex-1 py-3 rounded-xl font-medium flex items-center justify-center space-x-2 transition-all ${
                   selectedAthleteIndex === filteredAthletes.length - 1
-                    ? "bg-gray-100 text-gray-400"
-                    : "bg-white text-gray-700 shadow-sm border hover:shadow-md"
+                    ? "bg-slate-800 text-slate-500"
+                    : "bg-[#0d1716] text-slate-200 shadow-sm border hover:shadow-md"
                 }`}
               >
                 <span>Sonraki</span>
@@ -856,7 +1114,7 @@ export default function TestDataEntryPage() {
       {/* Missing Data Modal */}
       {showMissingModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden">
+          <div className="bg-[#0d1716] rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden">
             <div className="bg-red-500 px-5 py-4 flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <AlertTriangle className="h-6 w-6 text-white" />
@@ -870,17 +1128,20 @@ export default function TestDataEntryPage() {
               </button>
             </div>
             <div className="p-5 overflow-y-auto max-h-[60vh]">
-              <p className="text-gray-700 mb-4">
+              <p className="text-slate-200 mb-4">
                 Test tamamlanmadan önce aşağıdaki sporcuların eksik verilerini
                 girmeniz gerekiyor:
               </p>
               <div className="space-y-3">
                 {incompleteAthletes.map((athlete, idx) => {
-                  const missing = getMissingFields(athlete.measurements);
+                  const missing = getMissingFields(
+                    testFields,
+                    athlete.measurements
+                  );
                   return (
                     <div
                       key={idx}
-                      className="bg-gray-50 rounded-lg p-3 border border-gray-200"
+                      className="bg-slate-900/60 rounded-lg p-3 border border-slate-700"
                     >
                       <div className="flex items-center space-x-2 mb-2">
                         <div className="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
@@ -890,10 +1151,10 @@ export default function TestDataEntryPage() {
                             .slice(0, 2)
                             .join("")}
                         </div>
-                        <span className="font-medium text-gray-900">
+                        <span className="font-medium text-slate-100">
                           {athlete.fullName}
                         </span>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-slate-400">
                           ({athlete.birthYear})
                         </span>
                       </div>
@@ -901,7 +1162,7 @@ export default function TestDataEntryPage() {
                         {missing.map((field, fidx) => (
                           <span
                             key={fidx}
-                            className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full"
+                            className="bg-red-500/15 text-red-200 text-xs px-2 py-0.5 rounded-full"
                           >
                             {field}
                           </span>
@@ -912,17 +1173,100 @@ export default function TestDataEntryPage() {
                 })}
               </div>
             </div>
-            <div className="p-5 border-t bg-gray-50">
+            <div className="p-5 border-t border-slate-800 bg-slate-900/60">
+              <button
+                onClick={() => {
+                  setShowMissingModal(false);
+                  completeTest();
+                }}
+                className="mb-3 w-full bg-[#e4fc55] text-[#070e0e] py-3 rounded-xl font-medium hover:bg-white transition-colors"
+              >
+                Uyarıları Gördüm, Raporları Oluştur
+              </button>
               <button
                 onClick={() => setShowMissingModal(false)}
-                className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-medium hover:bg-gray-300 transition-colors"
+                className="w-full bg-slate-800 text-slate-200 py-3 rounded-xl font-medium hover:bg-slate-700 transition-colors"
               >
-                Anladım, Devam Et
+                Geri Dön ve Eksikleri Tamamla
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {showQuickAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <form
+            onSubmit={handleQuickAddAthlete}
+            className="w-full max-w-md rounded-2xl bg-[#0d1716] p-5 shadow-2xl"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-100">
+                Sahada Sporcu Ekle
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowQuickAddModal(false)}
+                className="text-slate-500 hover:text-slate-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-200">
+                  Ad Soyad
+                </label>
+                <input
+                  value={quickAddForm.fullName}
+                  onChange={(event) =>
+                    setQuickAddForm((prev) => ({
+                      ...prev,
+                      fullName: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:ring-2 focus:ring-[#e4fc55]"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-200">
+                  Doğum Tarihi
+                </label>
+                <input
+                  type="date"
+                  value={quickAddForm.birthDate}
+                  onChange={(event) =>
+                    setQuickAddForm((prev) => ({
+                      ...prev,
+                      birthDate: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:ring-2 focus:ring-[#e4fc55]"
+                  required
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              className="mt-5 w-full rounded-xl bg-[#e4fc55] py-3 font-semibold text-[#070e0e] hover:bg-white"
+            >
+              Listeye Ekle
+            </button>
+          </form>
+        </div>
+      )}
+
+      <QRScanner
+        isOpen={showXOneScanner}
+        onClose={() => setShowXOneScanner(false)}
+        onScan={handleXOneQrScan}
+        title="Youjiu Health QR Okut"
+        description="Cihaz ekranındaki QR kodu kameraya gösterin; okutulunca ölçümler otomatik forma işlenir."
+        manualLabel="QR okunmazsa cihazdaki bağlantıyı buraya yapıştırın:"
+        manualPlaceholder="https://... report_id=..."
+        manualButtonLabel="Cihaz Verisini Al"
+      />
     </div>
   );
 }

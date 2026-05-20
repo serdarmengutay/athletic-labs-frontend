@@ -316,6 +316,7 @@ function MvpAthleteReport({
   const passCount = valueOf(passMetric, measurements.passCount);
   const fatigue = valueOf(m.fatigueIndex);
   const averages = report.ageGroupAverages;
+  const includesPass = passCount !== null || averages?.passCount !== null;
   const radarData: ChartDatum[] = [
     {
       label: "VKI",
@@ -371,15 +372,22 @@ function MvpAthleteReport({
       athletePlot: normalizeForRadar(verticalJump, CHART_METRICS[5]),
       averagePlot: normalizeForRadar(averages?.verticalJump ?? null, CHART_METRICS[5]),
     },
-    {
-      label: "Pas",
-      shortLabel: CHART_METRICS[6].shortLabel,
-      unit: "adet",
-      athleteValue: passCount,
-      averageValue: averages?.passCount ?? null,
-      athletePlot: normalizeForRadar(passCount, CHART_METRICS[6]),
-      averagePlot: normalizeForRadar(averages?.passCount ?? null, CHART_METRICS[6]),
-    },
+    ...(includesPass
+      ? [
+          {
+            label: "Pas",
+            shortLabel: CHART_METRICS[6].shortLabel,
+            unit: "adet",
+            athleteValue: passCount,
+            averageValue: averages?.passCount ?? null,
+            athletePlot: normalizeForRadar(passCount, CHART_METRICS[6]),
+            averagePlot: normalizeForRadar(
+              averages?.passCount ?? null,
+              CHART_METRICS[6]
+            ),
+          },
+        ]
+      : []),
   ];
 
   const barData: ChartDatum[] = radarData;
@@ -403,7 +411,9 @@ function MvpAthleteReport({
       value: formatValue(verticalJump, "cm"),
       icon: ArrowUp10,
     },
-    { label: "Pas", value: formatPass(passCount), icon: Target },
+    ...(includesPass
+      ? [{ label: "Pas", value: formatPass(passCount), icon: Target }]
+      : []),
   ];
 
   return (

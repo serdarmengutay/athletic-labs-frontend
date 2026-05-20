@@ -856,12 +856,24 @@ export default function TestSessionPage() {
 
               if (result.success && result.athletes) {
                 // Import edilen sporcuları state'e ekle
-                const importedAthletes = result.athletes.map(
-                  (athlete: any) => ({
+                const importedAthletes = result.athletes.map((athlete) => {
+                  const importedAthlete = athlete as Athlete & {
+                    name?: string;
+                  };
+                  const fullName =
+                    importedAthlete.name ||
+                    `${importedAthlete.first_name || ""} ${
+                      importedAthlete.last_name || ""
+                    }`.trim();
+
+                  return {
                     id: athlete.id,
                     athlete_code: athlete.athlete_code,
-                    first_name: athlete.name.split(" ")[0],
-                    last_name: athlete.name.split(" ").slice(1).join(" "),
+                    first_name:
+                      importedAthlete.first_name || fullName.split(" ")[0],
+                    last_name:
+                      importedAthlete.last_name ||
+                      fullName.split(" ").slice(1).join(" "),
                     birth_year: athlete.birth_year,
                     height: 0,
                     weight: 0,
@@ -870,8 +882,8 @@ export default function TestSessionPage() {
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                     club: selectedClubForImport,
-                  })
-                );
+                  };
+                });
 
                 setAthletes((prev) => [...prev, ...importedAthletes]);
                 setSelectedAthletes((prev) => [...prev, ...importedAthletes]);

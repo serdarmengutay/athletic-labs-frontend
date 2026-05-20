@@ -12,9 +12,11 @@ export interface Club {
 
 export interface Athlete {
   id: string; // UUID formatında
+  uuid?: string; // Legacy ekranlarda kullanılan eski kod alanı
   athlete_code: string;
   first_name: string;
   last_name: string;
+  birth_date?: string;
   birth_year: number;
   height: number;
   weight: number;

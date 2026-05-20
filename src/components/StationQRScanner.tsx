@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { QrScanner } from "@yudiel/react-qr-scanner";
-import { Athlete, TestStationData } from "@/types";
-import { stationApi, athleteApi } from "@/lib/api";
+import React, { useState } from "react";
+import { Scanner } from "@yudiel/react-qr-scanner";
+import { Athlete } from "@/types";
+import { athleteApi } from "@/lib/api";
 import StationDataEntry from "./StationDataEntry";
 
 interface StationQRScannerProps {
@@ -118,8 +118,13 @@ const StationQRScanner: React.FC<StationQRScannerProps> = ({
             <div className="bg-white rounded-lg shadow-lg overflow-hidden">
               {/* QR Scanner */}
               <div className="relative">
-                <QrScanner
-                  onDecode={handleScan}
+                <Scanner
+                  onScan={(detectedCodes) => {
+                    const firstCode = detectedCodes[0]?.rawValue;
+                    if (firstCode) {
+                      handleScan(firstCode);
+                    }
+                  }}
                   onError={(error) => {
                     console.error("QR Scanner Error:", error);
                     setError("Kamera erişiminde hata oluştu");
@@ -127,9 +132,11 @@ const StationQRScanner: React.FC<StationQRScannerProps> = ({
                   constraints={{
                     facingMode: "environment", // Arka kamera
                   }}
-                  containerStyle={{
-                    width: "100%",
-                    height: "400px",
+                  styles={{
+                    container: {
+                      width: "100%",
+                      height: "400px",
+                    },
                   }}
                 />
 

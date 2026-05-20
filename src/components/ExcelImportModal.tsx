@@ -14,6 +14,15 @@ interface ExcelImportModalProps {
   onImportSuccess: (result: ExcelImportResult) => void;
 }
 
+interface ApiError {
+  response?: {
+    data?: {
+      message?: string;
+      errors?: string[] | string;
+    };
+  };
+}
+
 const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   isOpen,
   onClose,
@@ -41,13 +50,15 @@ const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         const workbook = XLSX.read(data, { type: "array" });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+          worksheet
+        );
 
         // Excel verilerini doğrula ve dönüştür
         const athletes: ExcelAthleteData[] = [];
         const validationErrors: string[] = [];
 
-        jsonData.forEach((row: any, index: number) => {
+        jsonData.forEach((row, index: number) => {
           const rowNumber = index + 2; // Excel'de satır numarası (header dahil)
 
           // Sütun sırasına göre veri al (1. sütun: Ad, 2. sütun: Soyad, 3. sütun: Doğum Yılı)
@@ -107,7 +118,7 @@ const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
         setImportedData(athletes);
         setIsLoading(false);
-      } catch (error) {
+      } catch {
         setErrors([
           "Excel dosyası okunurken hata oluştu. Lütfen dosya formatını kontrol edin.",
         ]);
@@ -189,18 +200,19 @@ const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
       onImportSuccess(result);
       onClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Import error:", error);
-      console.error("Error response:", error.response?.data);
+      const apiError = error as ApiError;
+      console.error("Error response:", apiError.response?.data);
 
       // Backend'den gelen hata mesajını göster
-      if (error.response?.data?.message) {
-        setErrors([error.response.data.message]);
-      } else if (error.response?.data?.errors) {
+      if (apiError.response?.data?.message) {
+        setErrors([apiError.response.data.message]);
+      } else if (apiError.response?.data?.errors) {
         setErrors(
-          Array.isArray(error.response.data.errors)
-            ? error.response.data.errors
-            : [error.response.data.errors]
+          Array.isArray(apiError.response.data.errors)
+            ? apiError.response.data.errors
+            : [apiError.response.data.errors]
         );
       } else {
         setErrors(["Sporcu verileri yüklenirken hata oluştu."]);

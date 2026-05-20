@@ -9,7 +9,8 @@ import {
   ScoutingPlayerDetail,
 } from "@/types/scouting";
 
-const API_BASE_URL = "http://localhost:5017/api";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5017/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -192,6 +193,23 @@ export const testApi = {
 };
 
 export const mvpTestSessionApi = {
+  getAll: () =>
+    api.get<{
+      success: boolean;
+      data: {
+        id: string;
+        clubName: string;
+        clubResponsibleName: string;
+        city: string;
+        sportType: string;
+        testDate: string;
+        status: "draft" | "in_progress" | "completed";
+        totalAthletes: number;
+        completedAthletes: number;
+        createdAt: string;
+      }[];
+      count: number;
+    }>("/test-sessions"),
   create: (data: {
     clubName: string;
     clubResponsibleName: string;
@@ -208,6 +226,7 @@ export const mvpTestSessionApi = {
       fullName: string;
       birthDate?: string;
       birthYear?: number;
+      gender?: "male" | "female" | "other";
     }[]
   ) => api.post(`/test-sessions/${testSessionId}/athletes`, { athletes }),
   getAthletes: (testSessionId: string) =>
@@ -225,10 +244,23 @@ export const mvpTestSessionApi = {
       passCount?: number;
     }
   ) => api.post(`/athlete-tests/${athleteTestId}/measurements`, data),
+  updateAthleteStatus: (
+    athleteTestId: string,
+    data: {
+      status: "active" | "absent" | "skipped";
+    }
+  ) => api.patch(`/athlete-tests/${athleteTestId}/status`, data),
   calculateReport: (testSessionId: string) =>
     api.post<SessionReportResponse>(
       `/test-sessions/${testSessionId}/calculate-report`
     ),
+  importXOneQr: (
+    testSessionId: string,
+    data: {
+      athleteId: string;
+      qrUrl: string;
+    }
+  ) => api.post(`/test-sessions/${testSessionId}/x-one/import-qr`, data),
 };
 
 export const scoutingApi = {

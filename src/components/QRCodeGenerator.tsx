@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Download, Copy, Check } from "lucide-react";
 
@@ -20,17 +20,19 @@ export default function QRCodeGenerator({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [copied, setCopied] = useState(false);
+  const qrData = useMemo(
+    () => ({
+      athleteId,
+      athleteName,
+      sessionId,
+      type: "athletic_test",
+    }),
+    [athleteId, athleteName, sessionId]
+  );
 
   useEffect(() => {
     const generateQR = async () => {
       try {
-        const qrData = {
-          athleteId,
-          athleteName,
-          sessionId,
-          timestamp: new Date().toISOString(),
-          type: "athletic_test",
-        };
         const qrString = JSON.stringify(qrData);
         const dataUrl = await QRCode.toDataURL(qrString, {
           width: size,
@@ -47,7 +49,7 @@ export default function QRCodeGenerator({
     };
 
     generateQR();
-  }, [athleteId, athleteName, sessionId, size]);
+  }, [qrData, size]);
 
   const downloadQR = () => {
     if (qrDataUrl) {
