@@ -42,6 +42,7 @@ export default function QRScanner({
   const [showManualFallback, setShowManualFallback] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  const hasScannedRef = useRef(false);
 
   const stopScanning = useCallback(() => {
     if (readerRef.current) {
@@ -53,8 +54,10 @@ export default function QRScanner({
 
   const handleScan = useCallback(
     (data: string) => {
+      if (hasScannedRef.current) return;
       const cleanData = data.trim();
       if (!cleanData) return;
+      hasScannedRef.current = true;
       stopScanning();
       onScan(cleanData);
     },
@@ -180,6 +183,7 @@ export default function QRScanner({
 
     setManualValue("");
     setShowManualFallback(false);
+    hasScannedRef.current = false;
     prepareAndStartCamera();
 
     return () => {

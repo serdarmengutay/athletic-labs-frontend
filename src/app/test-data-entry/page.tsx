@@ -29,8 +29,13 @@ import {
 import {
   getQueuedMeasurementCount,
   getQueuedMeasurementSaves,
+  getQueuedXOneQrImportCount,
+  getQueuedXOneQrImports,
   queueMeasurementSave,
+  queueXOneQrImport,
   removeQueuedMeasurementSave,
+  removeQueuedXOneQrImport,
+  updateQueuedXOneQrImport,
 } from "@/lib/offlineMeasurements";
 
 type Measurements = Partial<Record<MeasurementKey, number>>;
@@ -187,6 +192,42 @@ export default function TestDataEntryPage() {
           break;
         }
       }
+
+      const queuedXOneImports = await getQueuedXOneQrImports();
+      const refreshedSessionIds = new Set<string>();
+      for (const queuedImport of queuedXOneImports) {
+        try {
+          const response = await mvpTestSessionApi.importXOneQr(
+            queuedImport.testSessionId,
+            {
+              athleteId: queuedImport.athleteId,
+              qrUrl: queuedImport.qrUrl,
+            }
+          );
+          logYoujiuDeviceData(response.data);
+          await removeQueuedXOneQrImport(queuedImport.id);
+          refreshedSessionIds.add(queuedImport.testSessionId);
+        } catch (error) {
+          const nextQueuedImport = {
+            ...queuedImport,
+            attempts: queuedImport.attempts + 1,
+            lastError:
+              error instanceof Error
+                ? error.message
+                : "Youjiu QR senkronlanamadı",
+          };
+          await updateQueuedXOneQrImport(nextQueuedImport);
+          console.error("Bekleyen Youjiu QR senkronlanamadı:", error);
+          break;
+        }
+      }
+      for (const refreshedSessionId of refreshedSessionIds) {
+        try {
+          await refreshAthletesFromBackend(refreshedSessionId);
+        } catch (error) {
+          console.error("Senkron sonrası sporcu listesi yenilenemedi:", error);
+        }
+      }
       refreshPendingSyncCount();
     };
 
@@ -217,6 +258,14 @@ export default function TestDataEntryPage() {
     status: athlete.status || "active",
   });
 
+  const refreshAthletesFromBackend = async (sessionId: string) => {
+    const response = await mvpTestSessionApi.getAthletes(sessionId);
+    const mappedAthletes = response.data.data.athletes.map(
+      (athlete: SessionAthleteResponseItem) => mapBackendAthlete(athlete)
+    );
+    persistAthletes(mappedAthletes);
+  };
+
   const persistAthletes = (nextAthletes: ParsedAthlete[]) => {
     setAthletes(nextAthletes);
     localStorage.setItem("parsedAthletes", JSON.stringify(nextAthletes));
@@ -232,7 +281,11 @@ export default function TestDataEntryPage() {
 
   const refreshPendingSyncCount = async () => {
     if (typeof window === "undefined") return;
-    setPendingSyncCount(await getQueuedMeasurementCount());
+    const [measurementCount, xOneImportCount] = await Promise.all([
+      getQueuedMeasurementCount(),
+      getQueuedXOneQrImportCount(),
+    ]);
+    setPendingSyncCount(measurementCount + xOneImportCount);
   };
 
   const loadSessionAthletes = async (sessionId: string) => {
@@ -541,8 +594,121 @@ export default function TestDataEntryPage() {
     }
   };
 
+  const logYoujiuDeviceData = (payload: unknown) => {
+    const responsePayload =
+      typeof payload === "object" && payload !== null
+        ? (payload as {
+            data?: {
+              deviceData?: {
+                rawPayload?: unknown;
+                result?: unknown;
+                composition?: unknown;
+                measurement?: unknown;
+                posture?: unknown;
+                balance?: unknown;
+              };
+              normalized?: Record<string, unknown>;
+            };
+          })
+        : null;
+    const deviceData = responsePayload?.data?.deviceData;
+    const normalized = responsePayload?.data?.normalized;
+
+    if (!deviceData) {
+      console.info("Youjiu cihaz verisi response içinde yok:", payload);
+      return;
+    }
+
+    const rows: Array<{ alan: string; deger: unknown }> = [];
+    const walk = (value: unknown, path: string) => {
+      if (value === null || value === undefined) {
+        rows.push({ alan: path, deger: value });
+        return;
+      }
+      if (typeof value !== "object") {
+        rows.push({ alan: path, deger: value });
+        return;
+      }
+      if (Array.isArray(value)) {
+        if (value.length === 0) rows.push({ alan: path, deger: "[]" });
+        value.forEach((item, index) => walk(item, `${path}[${index}]`));
+        return;
+      }
+      const entries = Object.entries(value as Record<string, unknown>);
+      if (entries.length === 0) {
+        rows.push({ alan: path, deger: "{}" });
+        return;
+      }
+      entries.forEach(([key, nestedValue]) =>
+        walk(nestedValue, path ? `${path}.${key}` : key)
+      );
+    };
+
+    console.group("Youjiu cihaz verileri");
+    console.log("Normalize edilen değerler:", normalized);
+    console.table(
+      Object.entries(normalized || {}).map(([alan, deger]) => ({ alan, deger }))
+    );
+    console.log("Ayrıştırılmış cihaz bölümleri:", {
+      composition: deviceData.composition,
+      measurement: deviceData.measurement,
+      posture: deviceData.posture,
+      balance: deviceData.balance,
+    });
+    walk(deviceData.result || deviceData.rawPayload, "");
+    console.table(rows);
+    console.log("Ham Youjiu JSON:", deviceData.rawPayload);
+    console.groupEnd();
+  };
+
+  const isNetworkImportError = (error: unknown) => {
+    if (!navigator.onLine) return true;
+    if (typeof error !== "object" || error === null) return false;
+    const maybeAxiosError = error as {
+      code?: string;
+      message?: string;
+      response?: unknown;
+      request?: unknown;
+    };
+    return (
+      !maybeAxiosError.response &&
+      Boolean(maybeAxiosError.request) &&
+      ["ERR_NETWORK", "ECONNABORTED"].includes(maybeAxiosError.code || "")
+    );
+  };
+
+  const queueXOneQrForRetry = async (qrUrl: string, error?: unknown) => {
+    if (!testSessionId || !selectedAthlete?.athleteId) return;
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : undefined;
+    await queueXOneQrImport(
+      testSessionId,
+      selectedAthlete.athleteId,
+      qrUrl,
+      errorMessage
+    );
+    await refreshPendingSyncCount();
+    setSaveStatus("queued");
+    setShowXOneScanner(false);
+    setShowSaveSuccess(true);
+    setTimeout(() => setShowSaveSuccess(false), 2500);
+  };
+
   const handleImportXOneQr = async (qrUrl = xOneQrUrl) => {
     if (!testSessionId || !selectedAthlete?.athleteId || !qrUrl.trim()) {
+      return;
+    }
+
+    const cleanQrUrl = qrUrl.trim();
+    if (!navigator.onLine) {
+      await queueXOneQrForRetry(cleanQrUrl, "Cihaz çevrimdışı");
+      alert(
+        "İnternet yok. Youjiu QR bağlantısı kaydedildi; internet gelince otomatik içe aktarılacak."
+      );
       return;
     }
 
@@ -550,8 +716,9 @@ export default function TestDataEntryPage() {
     try {
       const response = await mvpTestSessionApi.importXOneQr(testSessionId, {
         athleteId: selectedAthlete.athleteId,
-        qrUrl: qrUrl.trim(),
+        qrUrl: cleanQrUrl,
       });
+      logYoujiuDeviceData(response.data);
       const normalized = response.data?.data?.normalized || {};
       const nextMeasurements: Measurements = {
         ...currentMeasurements,
@@ -598,7 +765,25 @@ export default function TestDataEntryPage() {
       setTimeout(() => setShowSaveSuccess(false), 2000);
     } catch (error) {
       console.error("X-One QR import hatası:", error);
-      alert("X-One QR verisi alınamadı. QR URL veya cihaz API yanıtını kontrol edin.");
+      if (isNetworkImportError(error)) {
+        await queueXOneQrForRetry(cleanQrUrl, error);
+        alert(
+          "Youjiu verisi şu an alınamadı. QR bağlantısı kaydedildi; internet/API geri gelince otomatik tekrar denenecek."
+        );
+        return;
+      }
+      const apiError =
+        typeof error === "object" && error !== null && "response" in error
+          ? (error as { response?: { data?: { code?: string; message?: string; error?: string } } })
+              .response?.data
+          : undefined;
+      console.error("X-One QR API yanıtı:", apiError);
+      alert(
+        [apiError?.code, apiError?.error || apiError?.message]
+          .filter(Boolean)
+          .join(" - ") ||
+          "X-One QR verisi alınamadı. QR URL veya cihaz API yanıtını kontrol edin."
+      );
     } finally {
       setIsImportingXOne(false);
     }
