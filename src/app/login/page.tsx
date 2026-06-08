@@ -33,11 +33,11 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="flex justify-center mb-8">
           <Image
-            src="/logo-placeholder.png"
+            src="/athleticlabs_logo.png"
             alt="Athletic Labs Logo"
             width={120}
             height={120}
-            className="rounded-full shadow-lg"
+            className="rounded-full object-cover shadow-lg"
           />
         </div>
 

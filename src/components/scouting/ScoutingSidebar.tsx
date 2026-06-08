@@ -57,7 +57,7 @@ export function ScoutingSidebar({
           alt="Athletic Labs Logo"
           width={44}
           height={44}
-          style={{ borderRadius: 999 }}
+          style={{ borderRadius: "100%" }}
         />
         <Typography sx={{ fontSize: 22, fontWeight: 800, letterSpacing: -0.4 }}>
           Athletic Labs <Box component="span" sx={{ color: "#4ade80" }}>| Scouting</Box>

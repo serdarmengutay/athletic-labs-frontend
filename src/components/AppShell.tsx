@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import {
-  Activity,
   BarChart3,
   CalendarDays,
   ClipboardList,
@@ -20,10 +20,9 @@ import { useAuth } from "@/contexts/AuthContext";
 const navItems = [
   { label: "Oturum Oluştur", href: "/", icon: ClipboardList },
   { label: "Dashboard", href: "/dashboard", icon: BarChart3 },
-  { label: "Test Girişi", href: "/test-data-entry", icon: Activity },
+  { label: "Takvim", href: "/calendar", icon: CalendarDays },
   { label: "Scouting", href: "/scouting", icon: ShieldCheck },
   { label: "Kullanıcılar", href: "/users", icon: Users },
-  { label: "Takvim", href: "/test-session", icon: CalendarDays },
 ];
 
 export default function AppShell({
@@ -31,11 +30,13 @@ export default function AppShell({
   subtitle,
   children,
   action,
+  wide = false,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   action?: React.ReactNode;
+  wide?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -50,9 +51,13 @@ export default function AppShell({
     <div className="min-h-screen bg-[#070e0e] text-white">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-[#070e0e]/95 lg:flex lg:flex-col">
         <div className="flex h-20 items-center gap-3 border-b border-white/10 px-6">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#e4fc55]/40 bg-[#e4fc55]/10 text-[#e4fc55]">
-            AL
-          </div>
+          <Image
+            src="/athleticlabs_logo.png"
+            alt="Athletic Labs Logo"
+            width={44}
+            height={44}
+            className="rounded-full border border-[#e4fc55]/30 object-cover"
+          />
           <div>
             <p className="text-sm font-semibold tracking-[0.18em] text-[#e4fc55]">
               ATHLETIC
@@ -111,7 +116,11 @@ export default function AppShell({
 
       <div className="lg:pl-72">
         <header className="sticky top-0 z-30 border-b border-white/10 bg-[#070e0e]/86 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <div
+            className={`mx-auto flex items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8 ${
+              wide ? "max-w-[96rem]" : "max-w-7xl"
+            }`}
+          >
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#e4fc55]">
                 Athletic Labs
@@ -127,7 +136,11 @@ export default function AppShell({
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <main
+          className={`mx-auto px-4 py-6 sm:px-6 lg:px-8 ${
+            wide ? "max-w-[96rem]" : "max-w-7xl"
+          }`}
+        >
           {children}
         </main>
       </div>

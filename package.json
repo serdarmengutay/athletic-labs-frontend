@@ -19,6 +19,9 @@
   ],
   "author": "Serdar Mengutay",
   "license": "MIT",
+  "engines": {
+    "node": ">=20 <23"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

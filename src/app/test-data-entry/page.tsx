@@ -88,6 +88,9 @@ const getMissingFields = (
   ).map((f) => f.label);
 };
 
+const normalizeSearchValue = (value: unknown) =>
+  String(value ?? "").trim().toLocaleLowerCase("tr");
+
 export default function TestDataEntryPage() {
   const router = useRouter();
   const [athletes, setAthletes] = useState<ParsedAthlete[]>([]);
@@ -323,8 +326,12 @@ export default function TestDataEntryPage() {
     if (selectedYear)
       result = result.filter((a) => a.birthYear === selectedYear);
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      result = result.filter((a) => a.fullName.toLowerCase().includes(query));
+      const query = normalizeSearchValue(searchQuery);
+      result = result.filter((athlete) =>
+        normalizeSearchValue(
+          `${athlete.fullName} ${athlete.birthDate} ${athlete.birthYear}`
+        ).includes(query)
+      );
     }
     result.sort((a, b) => {
       if (a.birthYear !== b.birthYear) return a.birthYear - b.birthYear;
@@ -608,11 +615,19 @@ export default function TestDataEntryPage() {
                 balance?: unknown;
               };
               normalized?: Record<string, unknown>;
+              importSource?: string;
+              importSourceLabel?: string;
+              officialMeasurementId?: string | null;
+              requestedMeasurementId?: string | null;
             };
           })
         : null;
     const deviceData = responsePayload?.data?.deviceData;
     const normalized = responsePayload?.data?.normalized;
+    const sourceLabel =
+      responsePayload?.data?.importSourceLabel ||
+      responsePayload?.data?.importSource ||
+      "Bilinmiyor";
 
     if (!deviceData) {
       console.info("Youjiu cihaz verisi response içinde yok:", payload);
@@ -645,6 +660,25 @@ export default function TestDataEntryPage() {
     };
 
     console.group("Youjiu cihaz verileri");
+    console.info("Youjiu veri kaynağı:", sourceLabel);
+    console.table([
+      {
+        alan: "veri_kaynagi",
+        deger: sourceLabel,
+      },
+      {
+        alan: "import_source",
+        deger: responsePayload?.data?.importSource || null,
+      },
+      {
+        alan: "official_measurement_id",
+        deger: responsePayload?.data?.officialMeasurementId || null,
+      },
+      {
+        alan: "requested_measurement_id",
+        deger: responsePayload?.data?.requestedMeasurementId || null,
+      },
+    ]);
     console.log("Normalize edilen değerler:", normalized);
     console.table(
       Object.entries(normalized || {}).map(([alan, deger]) => ({ alan, deger }))
@@ -876,11 +910,15 @@ export default function TestDataEntryPage() {
               Henüz sporcu verisi yüklenmemiş
             </p>
             <button
-              onClick={() => router.push("/")}
-              className="text-[#e4fc55] hover:text-white font-medium"
+              onClick={() => setShowQuickAddModal(true)}
+              className="rounded-xl bg-[#e4fc55] px-5 py-3 font-semibold text-[#070e0e] hover:bg-white"
             >
-              Ana sayfaya git ve Excel yükle
+              Sporcu Ekle
             </button>
+            <p className="mt-3 text-sm text-slate-500">
+              Listeyi sahada tek tek ekleyebilir veya ana ekrandan Excel
+              yükleyebilirsiniz.
+            </p>
           </div>
         ) : viewState === "list" ? (
           <div className="space-y-4">

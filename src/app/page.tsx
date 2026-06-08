@@ -134,10 +134,6 @@ export default function Home() {
 
   const handleSubmitTestSession = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (parsedAthletes.length === 0) {
-      alert("Lütfen önce sporcu listesini yükleyin.");
-      return;
-    }
     if (
       !formData.clubName ||
       !formData.clubResponsible ||
@@ -159,7 +155,10 @@ export default function Home() {
         city: formData.city,
         sportType: formData.sportType,
         testDate: formData.testDate,
-        notes: `Test oturumu - ${parsedAthletes.length} sporcu`,
+        notes:
+          parsedAthletes.length > 0
+            ? `Test oturumu - ${parsedAthletes.length} sporcu`
+            : "Test oturumu - sporcu listesi sonradan eklenecek",
       });
       const sessionId = sessionResponse.data?.data?.id;
       if (!sessionId) throw new Error("Backend session ID döndürmedi.");
@@ -169,21 +168,25 @@ export default function Home() {
         .includes("kız")
         ? "female"
         : "male";
-      const importResponse = await mvpTestSessionApi.importAthletes(
-        sessionId,
-        parsedAthletes.map((athlete) => ({
-          fullName: athlete.fullName,
-          birthDate: normalizeBirthDate(athlete.birthDate),
-          birthYear: athlete.birthYear,
-          gender: sessionGender as "male" | "female",
-        }))
-      );
-      const importedAthletes = importResponse.data?.data?.athletes || [];
-      const athletesWithBackendIds = parsedAthletes.map((athlete, index) => ({
-        ...athlete,
-        athleteId: importedAthletes[index]?.athleteId,
-        athleteTestId: importedAthletes[index]?.athleteTestId,
-      }));
+      let athletesWithBackendIds: ParsedAthlete[] = [];
+
+      if (parsedAthletes.length > 0) {
+        const importResponse = await mvpTestSessionApi.importAthletes(
+          sessionId,
+          parsedAthletes.map((athlete) => ({
+            fullName: athlete.fullName,
+            birthDate: normalizeBirthDate(athlete.birthDate),
+            birthYear: athlete.birthYear,
+            gender: sessionGender as "male" | "female",
+          }))
+        );
+        const importedAthletes = importResponse.data?.data?.athletes || [];
+        athletesWithBackendIds = parsedAthletes.map((athlete, index) => ({
+          ...athlete,
+          athleteId: importedAthletes[index]?.athleteId,
+          athleteTestId: importedAthletes[index]?.athleteTestId,
+        }));
+      }
 
       localStorage.setItem("parsedAthletes", JSON.stringify(athletesWithBackendIds));
       localStorage.setItem("testSessionName", formData.clubName);
@@ -203,7 +206,7 @@ export default function Home() {
   return (
     <AppShell
       title="Test Oturumu Oluştur"
-      subtitle="Kulüp bilgisini girin, sporcu listesini yükleyin ve saha testine hazır çıkın."
+      subtitle="Kulüp bilgisini girin; sporcu listesini şimdi veya saha günü sonradan ekleyin."
       action={
         <button
           onClick={() => router.push("/dashboard")}
@@ -303,14 +306,14 @@ export default function Home() {
               <div className="text-sm text-[#b8b8bd]">
                 {parsedAthletes.length > 0
                   ? `${parsedAthletes.length} sporcu hazır`
-                  : "Önce Excel/CSV sporcu listesi yükleyin"}
+                  : "Sporcu listesi olmadan da oturum oluşturabilirsiniz"}
               </div>
               <button
                 type="submit"
-                disabled={submitting || parsedAthletes.length === 0}
+                disabled={submitting}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#e4fc55] px-6 py-4 text-sm font-bold text-[#070e0e] transition hover:bg-white disabled:cursor-not-allowed disabled:bg-[#6f6f73] disabled:text-[#070e0e]/70"
               >
-                {submitting ? "Oluşturuluyor..." : "Oturumu Başlat"}
+                {submitting ? "Oluşturuluyor..." : "Oturumu Oluştur"}
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>
@@ -325,7 +328,7 @@ export default function Home() {
               </div>
               <div>
                 <h2 className="font-semibold">Sporcu Listesi</h2>
-                <p className="text-sm text-[#b8b8bd]">Ad Soyad, Doğum Tarihi</p>
+                <p className="text-sm text-[#b8b8bd]">Opsiyonel: Ad Soyad, Doğum Tarihi</p>
               </div>
             </div>
 
