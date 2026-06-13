@@ -1461,9 +1461,7 @@ export default function TestDataEntryPage() {
                   type="button"
                   onClick={() => setShowXOneScanner(true)}
                   disabled={
-                    isTestCompleted ||
-                    isImportingXOne ||
-                    !selectedAthlete?.athleteId
+                    isImportingXOne || !selectedAthlete?.athleteId
                   }
                   className="mx-auto flex items-center justify-center gap-2 rounded-lg bg-[#e4fc55] px-5 py-3 text-sm font-semibold text-[#070e0e] hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -1486,13 +1484,12 @@ export default function TestDataEntryPage() {
                     onChange={(event) => setXOneQrUrl(event.target.value)}
                     placeholder="https://... report_id=..."
                     className="min-w-0 flex-1 rounded-lg border border-[#2f403b] bg-slate-950 px-3 py-2 text-slate-100 focus:ring-2 focus:ring-[#e4fc55] focus:border-[#d7f33d]/70"
-                    disabled={isTestCompleted || isImportingXOne}
+                    disabled={isImportingXOne}
                   />
                   <button
                     type="button"
                     onClick={() => handleImportXOneQr()}
                     disabled={
-                      isTestCompleted ||
                       isImportingXOne ||
                       !selectedAthlete?.athleteId ||
                       !xOneQrUrl.trim()
