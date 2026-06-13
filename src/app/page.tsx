@@ -14,6 +14,7 @@ import {
 import * as XLSX from "xlsx";
 import AppShell from "@/components/AppShell";
 import { athleteApi, clubApi, mvpTestSessionApi } from "@/lib/api";
+import { DEFAULT_VALD_SESSION_CONFIG } from "@/lib/valdConfig";
 
 interface ParsedAthlete {
   fullName: string;
@@ -29,6 +30,8 @@ interface MvpSession {
   clubResponsibleName: string;
   city: string;
   sportType: string;
+  valdEnabled: boolean;
+  valdConfig: typeof DEFAULT_VALD_SESSION_CONFIG;
   testDate: string;
   status: "draft" | "in_progress" | "completed";
   totalAthletes: number;
@@ -50,6 +53,7 @@ export default function Home() {
     email: "",
     phone: "",
     sportType: "",
+    valdEnabled: false,
     testDate: "",
   });
 
@@ -154,6 +158,8 @@ export default function Home() {
         clubResponsiblePhone: formData.phone || undefined,
         city: formData.city,
         sportType: formData.sportType,
+        valdEnabled: formData.valdEnabled,
+        valdConfig: DEFAULT_VALD_SESSION_CONFIG,
         testDate: formData.testDate,
         notes:
           parsedAthletes.length > 0
@@ -193,6 +199,14 @@ export default function Home() {
       localStorage.setItem("testSessionId", sessionId);
       localStorage.setItem("testSessionDate", formData.testDate);
       localStorage.setItem("testSessionSportType", formData.sportType);
+      localStorage.setItem(
+        "testSessionValdEnabled",
+        String(formData.valdEnabled)
+      );
+      localStorage.setItem(
+        "testSessionValdConfig",
+        JSON.stringify(DEFAULT_VALD_SESSION_CONFIG)
+      );
       localStorage.removeItem("testCompleted");
       router.push("/test-data-entry");
     } catch (error) {
@@ -268,7 +282,7 @@ export default function Home() {
                   <input
                     type={type}
                     name={name}
-                    value={formData[name as keyof typeof formData]}
+                    value={String(formData[name as keyof typeof formData])}
                     onChange={handleInputChange}
                     placeholder={placeholder}
                     className="mt-2 w-full rounded-2xl border border-white/10 bg-[#091312] px-4 py-4 text-white outline-none transition placeholder:text-[#6f6f73] focus:border-[#e4fc55]/80"
@@ -300,6 +314,45 @@ export default function Home() {
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-[#091312] px-4 py-4 text-white outline-none transition focus:border-[#e4fc55]/80"
                 />
               </label>
+
+              <div className="md:col-span-2">
+                <span className="text-sm font-medium text-[#d6d6d8]">
+                  VALD Performance
+                </span>
+                <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-[#091312] p-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({ ...prev, valdEnabled: false }))
+                    }
+                    className={`rounded-xl px-4 py-3 text-sm font-semibold transition ${
+                      !formData.valdEnabled
+                        ? "bg-[#d6d6d8] text-[#070e0e]"
+                        : "text-[#b8b8bd] hover:bg-white/5"
+                    }`}
+                  >
+                    VALD Yok
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({ ...prev, valdEnabled: true }))
+                    }
+                    className={`rounded-xl px-4 py-3 text-sm font-semibold transition ${
+                      formData.valdEnabled
+                        ? "bg-[#e4fc55] text-[#070e0e]"
+                        : "text-[#b8b8bd] hover:bg-white/5"
+                    }`}
+                  >
+                    VALD Var
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-[#8f9996]">
+                  VALD raporu ayrı hazırlanır. VALD açık testte dikey sıçrama
+                  Athletic Labs formundan ve karnesinden kaldırılır; Youji Health
+                  QR ölçümü devam eder.
+                </p>
+              </div>
             </div>
 
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -400,6 +453,16 @@ export default function Home() {
                       localStorage.setItem("testSessionName", session.clubName);
                       localStorage.setItem("testSessionDate", session.testDate);
                       localStorage.setItem("testSessionSportType", session.sportType);
+                      localStorage.setItem(
+                        "testSessionValdEnabled",
+                        String(session.valdEnabled)
+                      );
+                      localStorage.setItem(
+                        "testSessionValdConfig",
+                        JSON.stringify(
+                          session.valdConfig || DEFAULT_VALD_SESSION_CONFIG
+                        )
+                      );
                       router.push("/test-data-entry");
                     }}
                     className="block w-full rounded-2xl border border-white/10 bg-[#091312] p-4 text-left transition hover:border-[#e4fc55]/50"

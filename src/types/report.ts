@@ -89,6 +89,8 @@ export interface FrontendAthleteReport {
   measurements?: {
     height?: number;
     weight?: number;
+    bmi?: number;
+    ffmi?: number;
     flexibility?: number;
     sprint30m?: number;
     sprint30mSecond?: number;
@@ -106,12 +108,21 @@ export interface FrontendAthleteReport {
     bmi: MetricResult;
     fatigueIndex: MetricResult;
   };
+  youjiSummary?: {
+    deviceReportUrl: string;
+    reportId: string;
+    measurementTime?: string;
+    bodyFatPercent?: number;
+    mineralAmount?: number;
+    proteinAmount?: number;
+  };
   overallPerformance: number;
 }
 
 export interface SessionReportResponse {
   testSessionId: string;
   clubName: string;
+  valdEnabled?: boolean;
   testDate?: string;
   reportGeneratedAt: string;
   athletes: FrontendAthleteReport[];

@@ -1,6 +1,7 @@
 import { toPng } from "html-to-image";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import QRCode from "qrcode";
 import {
   AthleteReportResponse,
   FrontendAthleteReport,
@@ -38,6 +39,9 @@ type ExportableReport =
       clubName: string;
       testDate?: string;
       generatedAt: string;
+      hideVerticalJump?: boolean;
+      youjiQrDataUrl?: string;
+      logoDataUrl?: string;
     };
 
 function sanitizeFileName(name: string): string {
@@ -45,6 +49,45 @@ function sanitizeFileName(name: string): string {
     .replace(/[^a-zA-Z0-9ğüşıöçĞÜŞİÖÇ\s]/g, "")
     .replace(/\s+/g, "_")
     .substring(0, 50);
+}
+
+async function loadAssetAsDataUrl(path: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(path, { cache: "force-cache" });
+    if (!response.ok) return undefined;
+    const blob = await response.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () =>
+        typeof reader.result === "string"
+          ? resolve(reader.result)
+          : reject(new Error("Görsel data URL formatına çevrilemedi."));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+async function waitForReportAssets(container: HTMLElement): Promise<void> {
+  const images = Array.from(container.querySelectorAll("img"));
+  await Promise.all(
+    images.map(
+      (image) =>
+        new Promise<void>((resolve) => {
+          if (image.complete) {
+            resolve();
+            return;
+          }
+          image.onload = () => resolve();
+          image.onerror = () => resolve();
+        })
+    )
+  );
+  if (document.fonts?.ready) {
+    await document.fonts.ready;
+  }
 }
 
 async function renderReportToImage(
@@ -64,20 +107,37 @@ async function renderReportToImage(
   const root = createRoot(container);
 
   try {
+    const youjiQrDataUrl =
+      exportableReport.kind === "session" &&
+      exportableReport.report.youjiSummary?.deviceReportUrl
+        ? await QRCode.toDataURL(exportableReport.report.youjiSummary.deviceReportUrl, {
+            errorCorrectionLevel: "M",
+            margin: 1,
+            width: 180,
+          })
+        : undefined;
+    const logoDataUrl =
+      exportableReport.kind === "session"
+        ? await loadAssetAsDataUrl("/athleticlabs_logo.png")
+        : undefined;
+
     const reportElement =
       exportableReport.kind === "legacy"
         ? createElement(AthleteReport, { report: exportableReport.report })
         : createElement(MvpAthleteReport, {
             report: exportableReport.report,
-            clubName: exportableReport.clubName,
             testDate: exportableReport.testDate,
             generatedAt: exportableReport.generatedAt,
+            hideVerticalJump: exportableReport.hideVerticalJump,
+            youjiQrDataUrl,
+            logoDataUrl,
           });
 
     await new Promise<void>((resolve) => {
       root.render(reportElement);
-      setTimeout(resolve, 500);
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });
+    await waitForReportAssets(container);
 
     const dataUrl = await toPng(container, {
       width: REPORT_WIDTH,
@@ -161,6 +221,7 @@ function normalizeReports(
     clubName: reports.clubName,
     testDate: reports.testDate,
     generatedAt: reports.reportGeneratedAt,
+    hideVerticalJump: Boolean(reports.valdEnabled),
   }));
 }
 
@@ -182,6 +243,19 @@ function formatPass(value: number | null | undefined): string {
   return `${Math.round(value)} adet / 30 sn`;
 }
 
+function formatReportDate(value?: string): string {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function calcVki(height?: number, weight?: number): number | null {
   if (!height || !weight) return null;
   return weight / Math.pow(height / 100, 2);
@@ -189,10 +263,10 @@ function calcVki(height?: number, weight?: number): number | null {
 
 function vkiLabel(vki: number | null): string {
   if (vki === null) return "-";
-  if (vki < 18.5) return `${formatValue(vki)} (Zayıf)`;
+  if (vki < 18.5) return `${formatValue(vki)} (Düşük)`;
   if (vki < 25) return `${formatValue(vki)} (Normal)`;
   if (vki < 30) return `${formatValue(vki)} (Yüksek)`;
-  return `${formatValue(vki)} (Çok yüksek)`;
+  return `${formatValue(vki)} (Çok Yüksek)`;
 }
 
 type ChartDirection = "lower_is_better" | "higher_is_better";
@@ -214,6 +288,13 @@ type ChartDatum = {
   averageValue: number | null;
   athletePlot: number;
   averagePlot: number;
+};
+
+type RadarScoreDatum = {
+  label: string;
+  shortLabel: string;
+  athleteScore: number | null;
+  averageScore: number | null;
 };
 
 const CHART_METRICS: ChartMetric[] = [
@@ -271,7 +352,7 @@ const CHART_METRICS: ChartMetric[] = [
     unit: "adet",
     direction: "higher_is_better",
     min: 0,
-    max: 300,
+    max: 35,
   },
 ];
 
@@ -287,27 +368,96 @@ function normalizeForRadar(
   return Math.max(0, Math.min(100, normalized * 100));
 }
 
+function normalizeScore(value: number | null | undefined): number | null {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  return Number(Math.max(0, Math.min(100, value)).toFixed(1));
+}
+
+function resolveRadarScore(
+  metric: MetricResult,
+  rawValue: number | null,
+  chartMetric: ChartMetric,
+  averageValue: number | null
+): number | null {
+  const backendScore = normalizeScore(metric.score);
+  if (backendScore !== null) return backendScore;
+
+  if (metric.percentile !== null && Number.isFinite(metric.percentile)) {
+    return normalizeScore(metric.percentile);
+  }
+
+  if (
+    rawValue !== null &&
+    averageValue !== null &&
+    Number.isFinite(rawValue) &&
+    Number.isFinite(averageValue) &&
+    averageValue !== 0
+  ) {
+    const relativeDifference = (rawValue - averageValue) / Math.abs(averageValue);
+    const directionAdjustedDifference =
+      chartMetric.direction === "lower_is_better"
+        ? -relativeDifference
+        : relativeDifference;
+    return normalizeScore(50 + directionAdjustedDifference * 100);
+  }
+
+  return rawValue === null ? null : normalizeForRadar(rawValue, chartMetric);
+}
+
+function resolveAverageRadarScore(
+  score: number | null | undefined,
+  rawValue: number | null
+): number | null {
+  const backendScore = normalizeScore(score);
+  if (backendScore !== null) return backendScore;
+  return rawValue === null ? null : 50;
+}
+
+function formatHeight(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
+  return `${Math.round(value)} cm`;
+}
+
+function formatChartNumber(
+  value: number | null | undefined,
+  unit: string
+): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
+  const precision = unit === "sn" ? 2 : unit === "adet" ? 0 : 1;
+  return Number(value).toFixed(precision);
+}
+
+function chartAxisLabel(item: ChartDatum): string {
+  if (!item.unit) return item.shortLabel;
+  return `${item.shortLabel} (${item.unit})`;
+}
+
 function MvpAthleteReport({
   report,
-  clubName,
   testDate,
   generatedAt,
+  hideVerticalJump = false,
+  youjiQrDataUrl,
+  logoDataUrl,
 }: {
   report: FrontendAthleteReport;
-  clubName: string;
   testDate?: string;
   generatedAt: string;
+  hideVerticalJump?: boolean;
+  youjiQrDataUrl?: string;
+  logoDataUrl?: string;
 }) {
   const m = report.metrics;
   const measurements = report.measurements || {};
   const passMetric = m.passCount ?? {
     value: measurements.passCount ?? null,
     percentile: null,
+    score: null,
     target: null,
   };
   const height = measurements.height;
   const weight = measurements.weight;
-  const vki = calcVki(height, weight);
+  const vki = measurements.bmi ?? calcVki(height, weight);
   const sprint1 = valueOf(m.sprint1, measurements.sprint30m);
   const sprint2 = valueOf(m.sprint2, measurements.sprint30mSecond);
   const agility = valueOf(m.agility, measurements.agility);
@@ -316,11 +466,105 @@ function MvpAthleteReport({
   const passCount = valueOf(passMetric, measurements.passCount);
   const fatigue = valueOf(m.fatigueIndex);
   const averages = report.ageGroupAverages;
+  const averageScores = report.ageGroupPercentiles;
   const includesPass = passCount !== null || averages?.passCount !== null;
-  const radarData: ChartDatum[] = [
+  const radarData: RadarScoreDatum[] = [
+    {
+      label: "Esneklik",
+      shortLabel: "Esneklik",
+      athleteScore: resolveRadarScore(
+        m.flexibility,
+        flexibility,
+        CHART_METRICS[1],
+        averages?.flexibility ?? null
+      ),
+      averageScore: resolveAverageRadarScore(
+        averageScores?.flexibility,
+        averages?.flexibility ?? null
+      ),
+    },
+    {
+      label: "30m Koşu",
+      shortLabel: "30m",
+      athleteScore: resolveRadarScore(
+        m.sprint1,
+        sprint1,
+        CHART_METRICS[2],
+        averages?.sprint1 ?? null
+      ),
+      averageScore: resolveAverageRadarScore(
+        averageScores?.sprint1,
+        averages?.sprint1 ?? null
+      ),
+    },
+    {
+      label: "İkinci 30m",
+      shortLabel: "2. 30m",
+      athleteScore: resolveRadarScore(
+        m.sprint2,
+        sprint2,
+        CHART_METRICS[3],
+        averages?.sprint2 ?? null
+      ),
+      averageScore: resolveAverageRadarScore(
+        averageScores?.sprint2,
+        averages?.sprint2 ?? null
+      ),
+    },
+    {
+      label: "Çeviklik",
+      shortLabel: "Çeviklik",
+      athleteScore: resolveRadarScore(
+        m.agility,
+        agility,
+        CHART_METRICS[4],
+        averages?.agility ?? null
+      ),
+      averageScore: resolveAverageRadarScore(
+        averageScores?.agility,
+        averages?.agility ?? null
+      ),
+    },
+    ...(!hideVerticalJump
+      ? [{
+          label: "Dikey Sıçrama",
+          shortLabel: "Sıçrama",
+          athleteScore: resolveRadarScore(
+            m.verticalJump,
+            verticalJump,
+            CHART_METRICS[5],
+            averages?.verticalJump ?? null
+          ),
+          averageScore: resolveAverageRadarScore(
+            averageScores?.verticalJump,
+            averages?.verticalJump ?? null
+          ),
+        }]
+      : []),
+    ...(includesPass
+      ? [
+          {
+            label: "Pas",
+            shortLabel: "Pas",
+            athleteScore: resolveRadarScore(
+              passMetric,
+              passCount,
+              CHART_METRICS[6],
+              averages?.passCount ?? null
+            ),
+            averageScore: resolveAverageRadarScore(
+              averageScores?.passCount,
+              averages?.passCount ?? null
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  const barData: ChartDatum[] = [
     {
       label: "VKI",
-      shortLabel: CHART_METRICS[0].shortLabel,
+      shortLabel: "VKI",
       unit: "",
       athleteValue: m.bmi.value,
       averageValue: averages?.bmi ?? null,
@@ -329,7 +573,7 @@ function MvpAthleteReport({
     },
     {
       label: "Esneklik",
-      shortLabel: CHART_METRICS[1].shortLabel,
+      shortLabel: "Esneklik",
       unit: "cm",
       athleteValue: flexibility,
       averageValue: averages?.flexibility ?? null,
@@ -338,7 +582,7 @@ function MvpAthleteReport({
     },
     {
       label: "30m Koşu",
-      shortLabel: CHART_METRICS[2].shortLabel,
+      shortLabel: "30m",
       unit: "sn",
       athleteValue: sprint1,
       averageValue: averages?.sprint1 ?? null,
@@ -347,7 +591,7 @@ function MvpAthleteReport({
     },
     {
       label: "İkinci 30m",
-      shortLabel: CHART_METRICS[3].shortLabel,
+      shortLabel: "2. 30m",
       unit: "sn",
       athleteValue: sprint2,
       averageValue: averages?.sprint2 ?? null,
@@ -356,27 +600,32 @@ function MvpAthleteReport({
     },
     {
       label: "Çeviklik",
-      shortLabel: CHART_METRICS[4].shortLabel,
+      shortLabel: "Çeviklik",
       unit: "sn",
       athleteValue: agility,
       averageValue: averages?.agility ?? null,
       athletePlot: normalizeForRadar(agility, CHART_METRICS[4]),
       averagePlot: normalizeForRadar(averages?.agility ?? null, CHART_METRICS[4]),
     },
-    {
-      label: "Dikey Sıçrama",
-      shortLabel: CHART_METRICS[5].shortLabel,
-      unit: "cm",
-      athleteValue: verticalJump,
-      averageValue: averages?.verticalJump ?? null,
-      athletePlot: normalizeForRadar(verticalJump, CHART_METRICS[5]),
-      averagePlot: normalizeForRadar(averages?.verticalJump ?? null, CHART_METRICS[5]),
-    },
+    ...(!hideVerticalJump
+      ? [{
+          label: "Dikey Sıçrama",
+          shortLabel: "Sıçrama",
+          unit: "cm",
+          athleteValue: verticalJump,
+          averageValue: averages?.verticalJump ?? null,
+          athletePlot: normalizeForRadar(verticalJump, CHART_METRICS[5]),
+          averagePlot: normalizeForRadar(
+            averages?.verticalJump ?? null,
+            CHART_METRICS[5]
+          ),
+        }]
+      : []),
     ...(includesPass
       ? [
           {
             label: "Pas",
-            shortLabel: CHART_METRICS[6].shortLabel,
+            shortLabel: "Pas",
             unit: "adet",
             athleteValue: passCount,
             averageValue: averages?.passCount ?? null,
@@ -389,8 +638,6 @@ function MvpAthleteReport({
         ]
       : []),
   ];
-
-  const barData: ChartDatum[] = radarData;
 
   const performanceRows = [
     { label: "30m Koşu", value: formatValue(sprint1, "sn"), icon: Timer },
@@ -406,15 +653,27 @@ function MvpAthleteReport({
       value: formatValue(flexibility, "cm"),
       icon: LineChart,
     },
-    {
-      label: "Dikey Sıçrama",
-      value: formatValue(verticalJump, "cm"),
-      icon: ArrowUp10,
-    },
+    ...(!hideVerticalJump
+      ? [{
+          label: "Dikey Sıçrama",
+          value: formatValue(verticalJump, "cm"),
+          icon: ArrowUp10,
+        }]
+      : []),
     ...(includesPass
       ? [{ label: "Pas", value: formatPass(passCount), icon: Target }]
       : []),
   ];
+  const availableRadarScores = radarData
+    .map((item) => item.athleteScore)
+    .filter((score): score is number => score !== null);
+  const overallPercentile =
+    report.overallPerformance > 0
+      ? report.overallPerformance
+      : availableRadarScores.length > 0
+      ? availableRadarScores.reduce((sum, score) => sum + score, 0) /
+        availableRadarScores.length
+      : 0;
 
   return (
     <div style={styles.page}>
@@ -422,6 +681,7 @@ function MvpAthleteReport({
         athleteName={report.fullName}
         birthYear={report.birthYear}
         testDate={testDate || generatedAt}
+        logoDataUrl={logoDataUrl}
       />
 
       <main style={styles.main}>
@@ -429,7 +689,7 @@ function MvpAthleteReport({
           <Card title="Fiziksel Ölçümler" icon={<Ruler size={18} />}>
             <DataRow
               label="Boy"
-              value={formatValue(height, "cm")}
+              value={formatHeight(height)}
               icon={<Ruler size={16} />}
             />
             <DataRow
@@ -441,6 +701,26 @@ function MvpAthleteReport({
               label="VKI"
               value={vkiLabel(vki)}
               icon={<Activity size={16} />}
+            />
+            <DataRow
+              label="FFMI"
+              value={formatValue(measurements.ffmi)}
+              icon={<Gauge size={16} />}
+            />
+            <DataRow
+              label="Yağ Oranı"
+              value={formatValue(report.youjiSummary?.bodyFatPercent, "%")}
+              icon={<Activity size={16} />}
+            />
+            <DataRow
+              label="Mineral"
+              value={formatValue(report.youjiSummary?.mineralAmount, "kg")}
+              icon={<Gauge size={16} />}
+            />
+            <DataRow
+              label="Protein"
+              value={formatValue(report.youjiSummary?.proteinAmount, "kg")}
+              icon={<Gauge size={16} />}
               isLast
             />
           </Card>
@@ -459,14 +739,14 @@ function MvpAthleteReport({
 
           <Card title="Genel Performans" icon={<Trophy size={18} />}>
             <div style={styles.overallBox}>
-              %{report.overallPerformance.toFixed(1)}
+              %{overallPercentile.toFixed(1)}
             </div>
             <div style={styles.overallLabel}>Yüzdelik Dilim</div>
           </Card>
         </section>
 
         <section style={styles.middleColumn}>
-          <Card title="Performans Radar Grafiği" icon={<LineChart size={18} />}>
+          <Card title="Performans Skorları" icon={<LineChart size={18} />}>
             <RadarSvg data={radarData} />
           </Card>
 
@@ -478,6 +758,7 @@ function MvpAthleteReport({
               fatigue={fatigue}
               flexibility={flexibility}
               verticalJump={verticalJump}
+              hideVerticalJump={hideVerticalJump}
               passCount={passCount}
             />
           </Card>
@@ -488,10 +769,40 @@ function MvpAthleteReport({
             <BarSvg data={barData} />
           </Card>
 
-          <div style={styles.clubTag}>{clubName}</div>
+          <YoujiDeviceCard report={report} qrDataUrl={youjiQrDataUrl} />
         </section>
       </main>
     </div>
+  );
+}
+
+function YoujiDeviceCard({
+  report,
+  qrDataUrl,
+}: {
+  report: FrontendAthleteReport;
+  qrDataUrl?: string;
+}) {
+  const summary = report.youjiSummary;
+
+  return (
+    <Card title="Sağlık Değerlendirme Verileri" icon={<Gauge size={18} />}>
+      <div style={styles.youjiCardBody}>
+        <div style={styles.youjiQrBox}>
+          {qrDataUrl ? (
+            <img src={qrDataUrl} alt="Youji Health rapor QR" style={styles.youjiQr} />
+          ) : (
+            <div style={styles.youjiQrEmpty}>QR</div>
+          )}
+        </div>
+        <div style={styles.youjiText}>
+          Tüm cihaz detayları için QR kodu okutun.
+        </div>
+        <div style={styles.youjiMeta}>
+          Ölçüm: {formatReportDate(summary?.measurementTime)}
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -499,15 +810,25 @@ function Header({
   athleteName,
   birthYear,
   testDate,
+  logoDataUrl,
 }: {
   athleteName: string;
   birthYear: number;
   testDate: string;
+  logoDataUrl?: string;
 }) {
   return (
     <header style={styles.header}>
       <div style={styles.brand}>
-        <div style={styles.brandLogo} />
+        {logoDataUrl ? (
+          <img
+            src={logoDataUrl}
+            alt="Athletic Labs"
+            style={styles.brandLogo}
+          />
+        ) : (
+          <div style={styles.brandLogoFallback}>AL</div>
+        )}
         <div>
           <div style={styles.brandName}>ATHLETIC LABS</div>
           <div style={styles.brandSub}>Sporcu Performans Analiz Sistemi</div>
@@ -515,13 +836,13 @@ function Header({
       </div>
 
       <div style={styles.titleArea}>
-        <h1 style={styles.title}>ATHLETIC LABS TEST VERİLERİ</h1>
+        <h1 style={styles.title}>SPORCU PERFORMANS KARNESİ</h1>
         <div style={styles.metaRow}>
           <span style={styles.metaItem}>
             <UserRound size={15} /> {athleteName}
           </span>
           <span style={styles.metaItem}>
-            <CalendarDays size={15} /> Doğum Tarihi: {birthYear}
+            <CalendarDays size={15} /> Doğum Yılı: {birthYear}
           </span>
           <span style={styles.metaItem}>
             <CalendarDays size={15} /> Test Tarihi:{" "}
@@ -578,16 +899,15 @@ function DataRow({
 function RadarSvg({
   data,
 }: {
-  data: ChartDatum[];
+  data: RadarScoreDatum[];
 }) {
   const cx = 190;
-  const cy = 142;
-  const maxR = 96;
+  const cy = 167;
+  const maxR = 92;
   const points = data.map((item, index) => {
     const angle = -Math.PI / 2 + (index * Math.PI * 2) / data.length;
-    const radius = (item.athletePlot / 100) * maxR;
-    const labelRadius =
-      item.shortLabel.length > 8 ? maxR + 24 : maxR + 28;
+    const radius = ((item.athleteScore ?? 0) / 100) * maxR;
+    const labelRadius = maxR + 24;
     return {
       ...item,
       x: cx + Math.cos(angle) * radius,
@@ -600,7 +920,7 @@ function RadarSvg({
   });
   const averagePoints = data.map((item, index) => {
     const angle = -Math.PI / 2 + (index * Math.PI * 2) / data.length;
-    const radius = (item.averagePlot / 100) * maxR;
+    const radius = ((item.averageScore ?? 0) / 100) * maxR;
     return {
       x: cx + Math.cos(angle) * radius,
       y: cy + Math.sin(angle) * radius,
@@ -609,7 +929,9 @@ function RadarSvg({
 
   const polygon = points.map((p) => `${p.x},${p.y}`).join(" ");
   const averagePolygon = averagePoints.map((p) => `${p.x},${p.y}`).join(" ");
-  const rings = [0.25, 0.5, 0.75, 1].map((ratio) =>
+  const hasAthletePolygon = data.every((item) => item.athleteScore !== null);
+  const hasAveragePolygon = data.every((item) => item.averageScore !== null);
+  const rings = [0.2, 0.4, 0.6, 0.8, 1].map((ratio) =>
     data
       .map((_, index) => {
         const angle = -Math.PI / 2 + (index * Math.PI * 2) / data.length;
@@ -621,15 +943,15 @@ function RadarSvg({
   );
 
   return (
-    <svg width="370" height="285" viewBox="0 0 370 285" style={styles.chartSvg}>
-      <rect x="0" y="0" width="370" height="285" fill="#06110f" />
+    <svg width="370" height="330" viewBox="0 0 370 330" style={styles.radarSvg}>
+      <rect x="0" y="0" width="370" height="330" rx="8" fill="#091310" />
       <g>
         {rings.map((ring) => (
           <polygon
             key={ring}
             points={ring}
             fill="none"
-            stroke="#23312e"
+            stroke="#2b3a35"
             strokeWidth="1"
           />
         ))}
@@ -640,40 +962,130 @@ function RadarSvg({
             y1={cy}
             x2={point.ax}
             y2={point.ay}
-            stroke="#20302c"
+            stroke="#2b3a35"
             strokeWidth="1"
           />
         ))}
-        <polygon
-          points={averagePolygon}
-          fill="rgba(111, 111, 115, 0.18)"
-          stroke="#6f6f73"
-          strokeWidth="3"
-        />
-        <polygon
-          points={polygon}
-          fill="rgba(210, 239, 55, 0.24)"
-          stroke="#d7f33d"
-          strokeWidth="3"
-        />
+        {hasAveragePolygon && (
+          <polygon
+            points={averagePolygon}
+            fill="rgba(184, 192, 188, 0.10)"
+            stroke="#9ba6a0"
+            strokeWidth="2.5"
+          />
+        )}
+        {hasAthletePolygon && (
+          <polygon
+            points={polygon}
+            fill="rgba(215, 243, 61, 0.22)"
+            stroke="#d7f33d"
+            strokeWidth="3.5"
+          />
+        )}
+        {averagePoints.map(
+          (point, index) =>
+            data[index].averageScore !== null && (
+              <circle
+                key={`average-${data[index].label}`}
+                cx={point.x}
+                cy={point.y}
+                r="3"
+                fill="#9ba6a0"
+              />
+            )
+        )}
+        {points.map(
+          (point) =>
+            point.athleteScore !== null && (
+              <circle
+                key={point.label}
+                cx={point.x}
+                cy={point.y}
+                r="4.5"
+                fill="#d7f33d"
+              />
+            )
+        )}
         {points.map((point) => (
-          <circle key={point.label} cx={point.x} cy={point.y} r="4" fill="#d7f33d" />
+          <g key={`label-${point.label}`}>
+            <text
+              x={point.lx}
+              y={point.ly - 5}
+              fill="#e8efeb"
+              fontSize="10.5"
+              fontWeight="700"
+              textAnchor={
+                point.lx < cx - 10
+                  ? "end"
+                  : point.lx > cx + 10
+                  ? "start"
+                  : "middle"
+              }
+              dominantBaseline="middle"
+            >
+              {point.shortLabel}
+            </text>
+            <text
+              x={point.lx}
+              y={point.ly + 8}
+              fill="#d7f33d"
+              fontSize="9.5"
+              fontWeight="800"
+              textAnchor={
+                point.lx < cx - 10
+                  ? "end"
+                  : point.lx > cx + 10
+                  ? "start"
+                  : "middle"
+              }
+              dominantBaseline="middle"
+            >
+              {point.athleteScore === null
+                ? "-"
+                : Math.round(point.athleteScore)}
+            </text>
+          </g>
         ))}
-        {points.map((point) => (
+        {[20, 40, 60, 80, 100].map((score) => (
           <text
-            key={point.label}
-            x={point.lx}
-            y={point.ly}
-            fill="#dfe8dd"
-            fontSize="10"
-            textAnchor={point.lx < cx - 10 ? "end" : point.lx > cx + 10 ? "start" : "middle"}
-            dominantBaseline="middle"
+            key={score}
+            x={cx + 5}
+            y={cy - (score / 100) * maxR + 3}
+            fill="#65736d"
+            fontSize="7.5"
           >
-            {point.shortLabel}
+            {score}
           </text>
         ))}
       </g>
-      <Legend x={76} y={18} athleteColor="#d7f33d" averageColor="#7c8580" />
+      <Legend
+        x={58}
+        y={18}
+        athleteColor="#d7f33d"
+        averageColor="#9ba6a0"
+        athleteLabel="Sporcu skoru"
+        averageLabel="Yaş grubu skoru"
+      />
+      {!hasAveragePolygon && (
+        <text
+          x="185"
+          y="38"
+          fill="#9ba6a0"
+          fontSize="8.5"
+          textAnchor="middle"
+        >
+          Yaş grubu skoru için yeterli referans veri yok.
+        </text>
+      )}
+      <text
+        x="185"
+        y="316"
+        fill="#819089"
+        fontSize="9"
+        textAnchor="middle"
+      >
+        Tüm eksenlerde yüksek skor daha iyi performansı gösterir.
+      </text>
     </svg>
   );
 }
@@ -684,16 +1096,30 @@ function BarSvg({
   data: ChartDatum[];
 }) {
   const chartHeight = 205;
-  const baseY = 230;
-  const startX = 30;
-  const groupWidth = 47;
+  const baseY = 240;
+  const startX = 28;
+  const groupWidth = 48;
 
   return (
-    <svg width="370" height="285" viewBox="0 0 370 285" style={styles.chartSvg}>
-      <rect x="0" y="0" width="370" height="285" fill="#06110f" />
-      {[0.25, 0.5, 0.75, 1].map((tick, index) => {
+    <svg
+      width="370"
+      height="330"
+      viewBox="0 0 370 330"
+      style={styles.comparisonSvg}
+    >
+      <rect x="0" y="0" width="370" height="330" rx="8" fill="#091310" />
+      {[0.25, 0.5, 0.75, 1].map((tick) => {
         const y = baseY - tick * chartHeight;
-        return <line key={index} x1="24" y1={y} x2="350" y2={y} stroke="#1d2d29" />;
+        return (
+          <line
+            key={tick}
+            x1="20"
+            y1={y}
+            x2="355"
+            y2={y}
+            stroke="#1d2d29"
+          />
+        );
       })}
       {data.map((item, index) => {
         const x = startX + index * groupWidth;
@@ -724,7 +1150,7 @@ function BarSvg({
               fontSize="8"
               textAnchor="middle"
             >
-              {formatValue(item.athleteValue, item.unit)}
+              {formatChartNumber(item.athleteValue, item.unit)}
             </text>
             <text
               x={x + 28.5}
@@ -733,17 +1159,17 @@ function BarSvg({
               fontSize="8"
               textAnchor="middle"
             >
-              {formatValue(item.averageValue, item.unit)}
+              {formatChartNumber(item.averageValue, item.unit)}
             </text>
             <text
               x={x + 18}
-              y="259"
+              y="274"
               fill="#bac5bf"
               fontSize="8.5"
               textAnchor="end"
-              transform={`rotate(-22 ${x + 18} 257)`}
+              transform={`rotate(-22 ${x + 18} 272)`}
             >
-              {item.shortLabel}
+              {chartAxisLabel(item)}
             </text>
           </g>
         );
@@ -758,21 +1184,25 @@ function Legend({
   y,
   athleteColor,
   averageColor,
+  athleteLabel = "Sporcu",
+  averageLabel = "Yaş Grubu Ortalaması",
 }: {
   x: number;
   y: number;
   athleteColor: string;
   averageColor: string;
+  athleteLabel?: string;
+  averageLabel?: string;
 }) {
   return (
     <g>
       <rect x={x} y={y} width="34" height="7" fill={athleteColor} />
       <text x={x + 42} y={y + 7} fill="#e9efe8" fontSize="10">
-        Sporcu
+        {athleteLabel}
       </text>
       <rect x={x + 104} y={y} width="34" height="7" fill={averageColor} />
       <text x={x + 146} y={y + 7} fill="#e9efe8" fontSize="10">
-        Yaş Grubu Ortalaması
+        {averageLabel}
       </text>
     </g>
   );
@@ -785,6 +1215,7 @@ function InfoBlock({
   fatigue,
   flexibility,
   verticalJump,
+  hideVerticalJump,
   passCount,
 }: {
   sprint1: number | null;
@@ -793,36 +1224,98 @@ function InfoBlock({
   fatigue: number | null;
   flexibility: number | null;
   verticalJump: number | null;
+  hideVerticalJump: boolean;
   passCount: number | null;
 }) {
+  const assessment = getFatigueAssessment(fatigue);
+
   return (
     <div style={styles.info}>
-      <h4 style={styles.infoHeading}>Yorgunluk Endeksi</h4>
-      <p style={styles.infoGood}>
-        Düşük (%0-3): Sporcu tekrar sprintlerde yüksek formunu koruyabiliyor,
-        toparlanma ve anaerobik kapasitesi güçlü.
-      </p>
-      <p style={styles.infoMid}>
-        Orta (%3-5): Orta düzey toparlanma, dayanıklılık geliştirmeye açık alan var.
-      </p>
-      <p style={styles.infoBad}>
-        Yüksek (%5+): Sporcunun tekrar sprintlerde hızlı yorulduğunu, anaerobik
-        gücün çabuk düştüğünü gösterir.
-      </p>
-      <p style={styles.infoValue}>
-        Bu sporcunun yorgunluk endeksi: {formatValue(fatigue, "%")} | 30m
-        tekrarları: {formatValue(sprint1, "sn")} / {formatValue(sprint2, "sn")}
-      </p>
+      <div style={styles.infoSummary}>
+        <div>
+          <div style={styles.infoEyebrow}>Yorgunluk Endeksi</div>
+          <div style={{ ...styles.infoStatus, color: assessment.color }}>
+            {assessment.label}
+          </div>
+        </div>
+        <div style={styles.infoScore}>{formatValue(fatigue, "%")}</div>
+      </div>
+      <p style={styles.infoDescription}>{assessment.description}</p>
+      <div style={styles.sprintComparison}>
+        <span>1. koşu: {formatValue(sprint1, "sn")}</span>
+        <span>2. koşu: {formatValue(sprint2, "sn")}</span>
+      </div>
       <h4 style={styles.infoHeading}>4 Aylık Hedefler</h4>
-      <ul style={styles.targetList}>
-        <li>30m koşu: {formatValue(targetSprint(sprint1), "sn")} hedefi</li>
-        <li>Çeviklik: {formatValue(targetAgility(agility), "sn")} hedefi</li>
-        <li>Dikey sıçrama: {formatValue(targetJump(verticalJump), "cm")} hedefi</li>
-        <li>Esneklik: {formatValue(targetFlexibility(flexibility), "cm")} hedefi</li>
-        <li>Pas: {formatPass(targetPass(passCount))} hedefi</li>
-      </ul>
+      <div style={styles.targetGrid}>
+        <TargetItem
+          label="30m Koşu"
+          value={formatValue(targetSprint(sprint1), "sn")}
+        />
+        <TargetItem
+          label="Çeviklik"
+          value={formatValue(targetAgility(agility), "sn")}
+        />
+        {!hideVerticalJump && (
+          <TargetItem
+            label="Dikey Sıçrama"
+            value={formatValue(targetJump(verticalJump), "cm")}
+          />
+        )}
+        <TargetItem
+          label="Esneklik"
+          value={formatValue(targetFlexibility(flexibility), "cm")}
+        />
+        {passCount !== null && (
+          <TargetItem label="Pas" value={formatPass(targetPass(passCount))} />
+        )}
+      </div>
     </div>
   );
+}
+
+function TargetItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={styles.targetItem}>
+      <span style={styles.targetLabel}>{label}</span>
+      <strong style={styles.targetValue}>{value}</strong>
+    </div>
+  );
+}
+
+function getFatigueAssessment(value: number | null): {
+  label: string;
+  description: string;
+  color: string;
+} {
+  if (value === null) {
+    return {
+      label: "Veri yok",
+      description: "Yorgunluk değerlendirmesi için iki sprint sonucu gereklidir.",
+      color: "#b7c2bd",
+    };
+  }
+  if (value <= 3) {
+    return {
+      label: "İyi tekrar performansı",
+      description:
+        "İki sprint arasındaki performans kaybı düşük. Sporcu hızını tekrar koşusunda büyük ölçüde koruyor.",
+      color: "#63df89",
+    };
+  }
+  if (value <= 5) {
+    return {
+      label: "Gelişime açık",
+      description:
+        "Tekrar sprintinde orta düzey performans kaybı var. Toparlanma ve tekrar hız kapasitesi geliştirilebilir.",
+      color: "#f7d65b",
+    };
+  }
+  return {
+    label: "Yakından takip edilmeli",
+    description:
+      "Tekrar sprintinde belirgin performans kaybı görülüyor. Anaerobik dayanıklılık çalışmalarına öncelik verilebilir.",
+    color: "#f06f61",
+  };
 }
 
 function targetSprint(value: number | null): number | null {
@@ -885,11 +1378,23 @@ const styles: Record<string, CSSProperties> = {
     height: 70,
     borderRadius: "50%",
     objectFit: "cover",
+    display: "block",
     border: "2px solid rgba(16,25,16,0.28)",
     background: "#fff",
-    backgroundImage: "url('/athleticlabs_logo.png')",
-    backgroundSize: "cover",
-    backgroundPosition: "center",
+  },
+  brandLogoFallback: {
+    width: 70,
+    height: 70,
+    flexShrink: 0,
+    borderRadius: "50%",
+    border: "2px solid rgba(16,25,16,0.28)",
+    background: "#ffffff",
+    color: "#101910",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 22,
+    fontWeight: 950,
   },
   brandName: {
     fontSize: 16,
@@ -910,7 +1415,7 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 30,
     lineHeight: "34px",
     fontWeight: 950,
-    letterSpacing: 1.5,
+    letterSpacing: 0,
     textAlign: "left",
   },
   metaRow: {
@@ -929,24 +1434,24 @@ const styles: Record<string, CSSProperties> = {
   main: {
     height: REPORT_HEIGHT - 105,
     display: "grid",
-    gridTemplateColumns: "410px 410px 410px",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: 24,
     padding: "30px 28px 28px",
     boxSizing: "border-box",
   },
   leftColumn: {
     display: "grid",
-    gridTemplateRows: "220px 360px 170px",
+    gridTemplateRows: "365px 365px 188px",
     gap: 18,
   },
   middleColumn: {
     display: "grid",
-    gridTemplateRows: "350px 430px",
+    gridTemplateRows: "420px 516px",
     gap: 18,
   },
   rightColumn: {
     display: "grid",
-    gridTemplateRows: "535px 30px",
+    gridTemplateRows: "420px 516px",
     gap: 18,
   },
   card: {
@@ -973,7 +1478,7 @@ const styles: Record<string, CSSProperties> = {
     color: "#d7f33d",
   },
   dataRow: {
-    minHeight: 43,
+    minHeight: 40,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1013,11 +1518,18 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 15,
     fontWeight: 800,
   },
-  chartSvg: {
+  radarSvg: {
     display: "block",
     width: "100%",
-    height: "285px",
-    borderRadius: 4,
+    height: 330,
+    borderRadius: 8,
+    background: "#06110f",
+  },
+  comparisonSvg: {
+    display: "block",
+    width: "100%",
+    height: 330,
+    borderRadius: 8,
     background: "#06110f",
   },
   info: {
@@ -1025,52 +1537,129 @@ const styles: Record<string, CSSProperties> = {
     lineHeight: "17px",
     color: "#dbe4de",
   },
+  infoSummary: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 16,
+    padding: "14px 16px",
+    border: "1px solid #34443d",
+    borderRadius: 8,
+    background: "#0d1815",
+  },
+  infoEyebrow: {
+    color: "#aebbb4",
+    fontSize: 10,
+    lineHeight: "13px",
+    fontWeight: 850,
+    textTransform: "uppercase",
+  },
+  infoStatus: {
+    marginTop: 4,
+    fontSize: 16,
+    lineHeight: "20px",
+    fontWeight: 950,
+  },
+  infoScore: {
+    color: "#d7f33d",
+    fontSize: 25,
+    lineHeight: "29px",
+    fontWeight: 950,
+    whiteSpace: "nowrap",
+  },
+  infoDescription: {
+    color: "#dbe4de",
+    margin: "12px 2px 10px",
+    fontSize: 12,
+    lineHeight: "17px",
+    fontWeight: 700,
+  },
+  sprintComparison: {
+    display: "flex",
+    gap: 10,
+    marginBottom: 16,
+    color: "#c5d0ca",
+    fontSize: 11,
+    lineHeight: "15px",
+    fontWeight: 800,
+  },
   infoHeading: {
-    margin: "4px 0 10px",
+    margin: "0 0 10px",
     color: "#d7f33d",
     fontSize: 13,
     textTransform: "uppercase",
     fontWeight: 950,
   },
-  infoGood: {
-    color: "#63df89",
-    margin: "0 0 9px",
-    fontWeight: 700,
+  targetGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 9,
   },
-  infoMid: {
-    color: "#f7d65b",
-    margin: "0 0 9px",
-    fontWeight: 700,
+  targetItem: {
+    minHeight: 55,
+    padding: "9px 11px",
+    borderRadius: 7,
+    border: "1px solid #33433c",
+    background: "#101b18",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    boxSizing: "border-box",
   },
-  infoBad: {
-    color: "#f06f61",
-    margin: "0 0 11px",
-    fontWeight: 700,
-  },
-  infoValue: {
-    color: "#eef6ef",
-    margin: "0 0 11px",
+  targetLabel: {
+    color: "#aebbb4",
+    fontSize: 10,
+    lineHeight: "13px",
     fontWeight: 800,
   },
-  infoWarn: {
-    color: "#f2a257",
-    margin: "0 0 8px",
-    fontWeight: 700,
-  },
-  targetList: {
-    margin: 0,
-    paddingLeft: 14,
+  targetValue: {
     color: "#eef6ef",
-    fontWeight: 700,
-    lineHeight: "21px",
+    marginTop: 3,
+    fontSize: 13,
+    lineHeight: "16px",
+    fontWeight: 950,
   },
-  clubTag: {
-    color: "#5f7168",
-    fontSize: 11,
-    fontWeight: 800,
-    textAlign: "right",
+  youjiCardBody: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    marginTop: 52,
+    textAlign: "center",
+  },
+  youjiQrBox: {
+    width: 180,
+    height: 180,
+    borderRadius: 8,
+    background: "#eef6ef",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
     overflow: "hidden",
-    whiteSpace: "nowrap",
-    textOverflow: "ellipsis",
+  },
+  youjiQr: {
+    width: 176,
+    height: 176,
+    display: "block",
+  },
+  youjiQrEmpty: {
+    color: "#5f7168",
+    fontWeight: 950,
+    fontSize: 24,
+  },
+  youjiText: {
+    color: "#eef6ef",
+    fontSize: 16,
+    lineHeight: "21px",
+    fontWeight: 850,
+    maxWidth: 280,
+  },
+  youjiMeta: {
+    color: "#b7c2bd",
+    fontSize: 13,
+    lineHeight: "17px",
+    fontWeight: 750,
+    marginTop: 0,
   },
 };

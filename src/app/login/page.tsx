@@ -11,17 +11,34 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMessage("");
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
       router.push("/");
     } catch (error) {
       console.error("Login error:", error);
+      const errorCode =
+        typeof error === "object" && error !== null && "code" in error
+          ? String((error as { code?: string }).code)
+          : "";
+      if (
+        ["auth/invalid-credential", "auth/wrong-password", "auth/user-not-found"].includes(
+          errorCode
+        )
+      ) {
+        setErrorMessage("E-posta veya şifre hatalı.");
+      } else if (errorCode === "auth/too-many-requests") {
+        setErrorMessage("Çok fazla deneme yapıldı. Biraz bekleyip tekrar deneyin.");
+      } else {
+        setErrorMessage("Giriş yapılamadı. Bilgileri kontrol edip tekrar deneyin.");
+      }
     } finally {
       setLoading(false);
     }
@@ -84,6 +101,15 @@ export default function LoginPage() {
                 placeholder="••••••••"
               />
             </div>
+
+            {errorMessage && (
+              <div
+                role="alert"
+                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+              >
+                {errorMessage}
+              </div>
+            )}
 
             {/* Submit Button */}
             <button

@@ -1,11 +1,11 @@
 "use client";
 
-import { ShieldCheck, UserRound } from "lucide-react";
+import { UserRound } from "lucide-react";
 import AppShell from "@/components/AppShell";
 
 const fieldAccounts = [
   "serdar@athleticlabs.com",
-  "selçuk@athleticlabs.com",
+  "selcuk@athleticlabs.com",
   "erhan@athleticlabs.com",
   "osman@athleticlabs.com",
   "huseyin@athleticlabs.com",
@@ -19,7 +19,7 @@ export default function UsersPage() {
       title="Kullanıcılar"
       subtitle="Saha testlerinde kullanılacak Athletic Labs giriş hesapları."
     >
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="grid gap-6">
         <section className="rounded-3xl border border-white/10 bg-white/[0.04]">
           <div className="border-b border-white/10 p-5">
             <h2 className="text-lg font-semibold">Saha Hesapları</h2>
@@ -48,16 +48,6 @@ export default function UsersPage() {
           </div>
         </section>
 
-        <aside className="rounded-3xl border border-[#e4fc55]/20 bg-[#e4fc55]/8 p-5">
-          <ShieldCheck className="h-8 w-8 text-[#e4fc55]" />
-          <h2 className="mt-4 text-lg font-semibold">Authentication Durumu</h2>
-          <p className="mt-2 text-sm leading-6 text-[#d6d6d8]">
-            Login/logout Firebase Auth üzerinden çalışıyor. Bu hesapların ortak
-            test şifresi daha önce oluşturuldu. Production’da kullanıcı ekleme,
-            pasifleştirme ve rol verme için backend tarafında admin-only endpoint
-            açmak en doğru sonraki adım.
-          </p>
-        </aside>
       </div>
     </AppShell>
   );

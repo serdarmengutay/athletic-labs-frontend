@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { mvpTestSessionApi } from "@/lib/api";
+import { DEFAULT_VALD_SESSION_CONFIG } from "@/lib/valdConfig";
 
 interface CalendarSession {
   id: string;
@@ -20,6 +21,8 @@ interface CalendarSession {
   clubResponsibleName: string;
   city: string;
   sportType: string;
+  valdEnabled: boolean;
+  valdConfig: typeof DEFAULT_VALD_SESSION_CONFIG;
   testDate: string;
   status: "draft" | "in_progress" | "completed";
   totalAthletes: number;
@@ -122,6 +125,11 @@ export default function CalendarPage() {
     localStorage.setItem("testSessionName", session.clubName);
     localStorage.setItem("testSessionDate", session.testDate);
     localStorage.setItem("testSessionSportType", session.sportType);
+    localStorage.setItem("testSessionValdEnabled", String(session.valdEnabled));
+    localStorage.setItem(
+      "testSessionValdConfig",
+      JSON.stringify(session.valdConfig || DEFAULT_VALD_SESSION_CONFIG)
+    );
     router.push("/test-data-entry");
   };
 

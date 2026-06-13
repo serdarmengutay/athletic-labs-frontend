@@ -8,6 +8,7 @@ import {
   ScoutingListResponse,
   ScoutingPlayerDetail,
 } from "@/types/scouting";
+import type { ValdSessionConfig } from "./valdConfig";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5017/api";
@@ -202,6 +203,8 @@ export const mvpTestSessionApi = {
         clubResponsibleName: string;
         city: string;
         sportType: string;
+        valdEnabled: boolean;
+        valdConfig: ValdSessionConfig;
         testDate: string;
         status: "draft" | "in_progress" | "completed";
         totalAthletes: number;
@@ -217,6 +220,8 @@ export const mvpTestSessionApi = {
     clubResponsiblePhone?: string;
     city: string;
     sportType: string;
+    valdEnabled?: boolean;
+    valdConfig?: ValdSessionConfig;
     testDate: string;
     notes?: string;
   }) => api.post("/test-sessions", data),
@@ -231,6 +236,11 @@ export const mvpTestSessionApi = {
   ) => api.post(`/test-sessions/${testSessionId}/athletes`, { athletes }),
   getAthletes: (testSessionId: string) =>
     api.get(`/test-sessions/${testSessionId}/athletes`),
+  downloadFieldData: (testSessionId: string) =>
+    api.get<Blob>(`/test-sessions/${testSessionId}/field-data.xlsx`, {
+      responseType: "blob",
+      timeout: 30000,
+    }),
   saveMeasurements: (
     athleteTestId: string,
     data: {
