@@ -218,8 +218,6 @@ export default function TestDataEntryPage() {
       setTestSessionId(sessionId);
       loadSessionAthletes(sessionId);
     }
-    const completed = localStorage.getItem("testCompleted");
-    if (completed === "true") setIsTestCompleted(true);
     const absentKeys = localStorage.getItem("absentAthleteKeys");
     if (absentKeys) setAbsentAthleteKeys(JSON.parse(absentKeys));
     refreshPendingSyncCount();
@@ -683,7 +681,10 @@ export default function TestDataEntryPage() {
       );
       reportSession.athletes = reportSession.athletes.map((report) => ({
         ...report,
-        measurements: measurementByAthleteId.get(report.athleteId),
+        measurements: {
+          ...report.measurements,
+          ...measurementByAthleteId.get(report.athleteId),
+        },
       }));
 
       // Export to ZIP with progress callback
@@ -697,7 +698,6 @@ export default function TestDataEntryPage() {
 
       // Mark as completed
       setIsTestCompleted(true);
-      localStorage.setItem("testCompleted", "true");
 
       // Console log for debugging
       console.log("========================================");
@@ -1175,33 +1175,33 @@ export default function TestDataEntryPage() {
               </p>
 
               {/* Complete Test Button */}
-              {!isTestCompleted && (
-                <button
-                  onClick={handleCompleteTest}
-                  disabled={isExporting}
-                  className={`w-full py-3 rounded-xl font-semibold flex items-center justify-center space-x-2 transition-all ${
-                    !isExporting
-                       ? "bg-[#e4fc55] text-[#070e0e] shadow-lg hover:bg-white"
-                      : "bg-slate-800 text-slate-400 border-2 border-dashed border-slate-600 cursor-not-allowed"
-                  }`}
-                >
-                  {isExporting ? (
-                    <>
-                      <Download className="h-5 w-5 animate-bounce" />
-                      <span>Raporlar Hazırlanıyor...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Trophy className="h-5 w-5" />
-                      <span>
-                        {allCompleted
-                          ? "Testi Tamamla ve Raporları İndir"
-                          : `Eksikleri Gör ve Rapor Al (${incompleteAthletes.length} eksik)`}
-                      </span>
-                    </>
-                  )}
-                </button>
-              )}
+              <button
+                onClick={handleCompleteTest}
+                disabled={isExporting}
+                className={`w-full py-3 rounded-xl font-semibold flex items-center justify-center space-x-2 transition-all ${
+                  !isExporting
+                     ? "bg-[#e4fc55] text-[#070e0e] shadow-lg hover:bg-white"
+                    : "bg-slate-800 text-slate-400 border-2 border-dashed border-slate-600 cursor-not-allowed"
+                }`}
+              >
+                {isExporting ? (
+                  <>
+                    <Download className="h-5 w-5 animate-bounce" />
+                    <span>Raporlar Hazırlanıyor...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trophy className="h-5 w-5" />
+                    <span>
+                      {isTestCompleted
+                        ? "Karneleri Yeniden Oluştur ve İndir"
+                        : allCompleted
+                        ? "Testi Tamamla ve Raporları İndir"
+                        : `Eksikleri Gör ve Rapor Al (${incompleteAthletes.length} eksik)`}
+                    </span>
+                  </>
+                )}
+              </button>
 
               {/* Export Progress */}
               {isExporting && exportProgress.total > 0 && (
@@ -1240,7 +1240,7 @@ export default function TestDataEntryPage() {
                     Test Tamamlandı!
                   </p>
                   <p className="text-sm text-[#e4fc55]">
-                    Tüm veriler merkezi veritabanına kaydedildi
+                    Verileri düzeltebilir ve karneleri yeniden oluşturabilirsiniz
                   </p>
                 </div>
               </div>
@@ -1490,9 +1490,8 @@ export default function TestDataEntryPage() {
                           : "border-[#2f403b] bg-slate-950 focus:border-[#d7f33d]/70 focus:ring-2 focus:ring-[#e4fc55]"
                       }`}
                       disabled={
-                        isTestCompleted ||
-                        (testSessionValdEnabled &&
-                          valdDisabledFieldSet.has(field.key))
+                        testSessionValdEnabled &&
+                        valdDisabledFieldSet.has(field.key)
                       }
                     />
                   </div>
@@ -1574,15 +1573,13 @@ export default function TestDataEntryPage() {
             </div>
 
             {/* Save Button */}
-            {!isTestCompleted && (
-              <button
-                onClick={handleSave}
-                className="w-full bg-[#e4fc55] text-[#070e0e] py-3 rounded-xl font-semibold flex items-center justify-center space-x-2 shadow-lg hover:bg-white transition-all"
-              >
-                <Save className="h-5 w-5" />
-                <span>Kaydet</span>
-              </button>
-            )}
+            <button
+              onClick={handleSave}
+              className="w-full bg-[#e4fc55] text-[#070e0e] py-3 rounded-xl font-semibold flex items-center justify-center space-x-2 shadow-lg hover:bg-white transition-all"
+            >
+              <Save className="h-5 w-5" />
+              <span>Kaydet</span>
+            </button>
 
             {/* Success Message */}
             {showSaveSuccess && (

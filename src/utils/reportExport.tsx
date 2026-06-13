@@ -674,7 +674,7 @@ function MvpAthleteReport({
     ...(handgrip !== null
       ? [{
           label: "Handgrip",
-          value: `${formatValue(handgrip, "kg")} kg${
+          value: `${formatValue(handgrip, "kg")}${
             measurements.handgripCategory
               ? ` (${measurements.handgripCategory})`
               : ""
