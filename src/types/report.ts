@@ -97,6 +97,8 @@ export interface FrontendAthleteReport {
     agility?: number;
     verticalJump?: number;
     passCount?: number;
+    handgrip?: number;
+    handgripCategory?: "Ortalama" | "İyi" | "Çok İyi";
   };
   metrics: {
     sprint1: MetricResult;

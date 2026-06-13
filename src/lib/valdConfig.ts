@@ -31,6 +31,7 @@ const measurementKeys = new Set<MeasurementKey>([
   "agility",
   "verticalJump",
   "passCount",
+  "handgrip",
 ]);
 
 export function normalizeValdSessionConfig(

@@ -254,6 +254,7 @@ export const mvpTestSessionApi = {
       agility?: number;
       verticalJump?: number;
       passCount?: number;
+      handgrip?: number;
     }
   ) => api.post(`/athlete-tests/${athleteTestId}/measurements`, data),
   updateAthleteStatus: (

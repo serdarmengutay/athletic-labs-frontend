@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Athletic Labs",
   description: "Sporcu Performans Takip Sistemi",
+  icons: {
+    icon: "/athleticlabs_logo.png",
+    shortcut: "/athleticlabs_logo.png",
+    apple: "/athleticlabs_logo.png",
+  },
 };
 
 export default function RootLayout({

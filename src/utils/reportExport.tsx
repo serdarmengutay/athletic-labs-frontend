@@ -471,6 +471,7 @@ function MvpAthleteReport({
   const flexibility = valueOf(m.flexibility, measurements.flexibility);
   const verticalJump = valueOf(m.verticalJump, measurements.verticalJump);
   const passCount = valueOf(passMetric, measurements.passCount);
+  const handgrip = measurements.handgrip ?? null;
   const fatigue = valueOf(m.fatigueIndex);
   const averages = report.ageGroupAverages;
   const averageScores = report.ageGroupPercentiles;
@@ -669,6 +670,17 @@ function MvpAthleteReport({
       : []),
     ...(includesPass
       ? [{ label: "Pas", value: formatPass(passCount), icon: Target }]
+      : []),
+    ...(handgrip !== null
+      ? [{
+          label: "Handgrip",
+          value: `${formatValue(handgrip, "kg")} kg${
+            measurements.handgripCategory
+              ? ` (${measurements.handgripCategory})`
+              : ""
+          }`,
+          icon: Gauge,
+        }]
       : []),
   ];
   const availableRadarScores = radarData

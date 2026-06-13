@@ -6,7 +6,8 @@ export type MeasurementKey =
   | "sprint30mSecond"
   | "agility"
   | "verticalJump"
-  | "passCount";
+  | "passCount"
+  | "handgrip";
 
 export interface MeasurementFieldConfig {
   key: MeasurementKey;
@@ -88,6 +89,14 @@ const footballFields: MeasurementFieldConfig[] = [
     required: true,
     placeholder: "Pas adedi",
   },
+  {
+    key: "handgrip",
+    label: "Handgrip",
+    unit: "kg",
+    step: "0.1",
+    required: false,
+    placeholder: "En iyi el ölçümü",
+  },
 ];
 
 export const SPORT_TEST_CONFIGS: SportTestConfig[] = [
@@ -99,7 +108,9 @@ export const SPORT_TEST_CONFIGS: SportTestConfig[] = [
   {
     id: "volleyball_girls",
     label: "Kız Voleybol",
-    fields: footballFields.filter((field) => field.key !== "passCount"),
+    fields: footballFields.filter(
+      (field) => field.key !== "passCount" && field.key !== "handgrip"
+    ),
   },
 ];
 
