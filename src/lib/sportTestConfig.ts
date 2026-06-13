@@ -108,9 +108,7 @@ export const SPORT_TEST_CONFIGS: SportTestConfig[] = [
   {
     id: "volleyball_girls",
     label: "Kız Voleybol",
-    fields: footballFields.filter(
-      (field) => field.key !== "passCount" && field.key !== "handgrip"
-    ),
+    fields: footballFields.filter((field) => field.key !== "passCount"),
   },
 ];
 
