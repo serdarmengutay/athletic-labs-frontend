@@ -20,7 +20,6 @@ import {
   Bolt,
   CalendarDays,
   Dna,
-  Footprints,
   Gem,
   HandFist,
   HeartPulse,
@@ -28,6 +27,7 @@ import {
   Ruler,
   Stethoscope,
   Target,
+  Timer,
   Trophy,
   UserRound,
   Weight,
@@ -654,12 +654,8 @@ function MvpAthleteReport({
   ];
 
   const performanceRows = [
-    { label: "30m Koşu", value: formatValue(sprint1, "sn"), icon: Footprints },
-    {
-      label: "İkinci 30m",
-      value: formatValue(sprint2, "sn"),
-      icon: Footprints,
-    },
+    { label: "30m Koşu", value: formatValue(sprint1, "sn"), icon: Timer },
+    { label: "İkinci 30m", value: formatValue(sprint2, "sn"), icon: Timer },
     {
       label: "Yorgunluk Endeksi",
       value: formatValue(fatigue, "%"),
