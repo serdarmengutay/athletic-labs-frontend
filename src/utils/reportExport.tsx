@@ -14,14 +14,20 @@ import AthleteReport from "@/components/AthleteReport";
 import {
   Activity,
   ArrowUp10,
+  BadgeInfo,
   BarChart3,
+  BicepsFlexed,
   Bolt,
   CalendarDays,
-  Gauge,
+  Dna,
+  Footprints,
+  Gem,
+  HandFist,
+  HeartPulse,
   LineChart,
   Ruler,
+  Stethoscope,
   Target,
-  Timer,
   Trophy,
   UserRound,
   Weight,
@@ -648,8 +654,12 @@ function MvpAthleteReport({
   ];
 
   const performanceRows = [
-    { label: "30m Koşu", value: formatValue(sprint1, "sn"), icon: Timer },
-    { label: "İkinci 30m", value: formatValue(sprint2, "sn"), icon: Timer },
+    { label: "30m Koşu", value: formatValue(sprint1, "sn"), icon: Footprints },
+    {
+      label: "İkinci 30m",
+      value: formatValue(sprint2, "sn"),
+      icon: Footprints,
+    },
     {
       label: "Yorgunluk Endeksi",
       value: formatValue(fatigue, "%"),
@@ -679,7 +689,7 @@ function MvpAthleteReport({
               ? ` (${measurements.handgripCategory})`
               : ""
           }`,
-          icon: Gauge,
+          icon: HandFist,
         }]
       : []),
   ];
@@ -724,22 +734,22 @@ function MvpAthleteReport({
             <DataRow
               label="FFMI"
               value={formatValue(measurements.ffmi)}
-              icon={<Gauge size={16} />}
+              icon={<BicepsFlexed size={16} />}
             />
             <DataRow
               label="Yağ Oranı"
               value={formatValue(report.youjiSummary?.bodyFatPercent, "%")}
-              icon={<Activity size={16} />}
+              icon={<HeartPulse size={16} />}
             />
             <DataRow
               label="Mineral"
               value={formatValue(report.youjiSummary?.mineralAmount, "kg")}
-              icon={<Gauge size={16} />}
+              icon={<Gem size={16} />}
             />
             <DataRow
               label="Protein"
               value={formatValue(report.youjiSummary?.proteinAmount, "kg")}
-              icon={<Gauge size={16} />}
+              icon={<Dna size={16} />}
               isLast
             />
           </Card>
@@ -769,7 +779,7 @@ function MvpAthleteReport({
             <RadarSvg data={radarData} />
           </Card>
 
-          <Card title="Bilgilendirme" icon={<Gauge size={18} />}>
+          <Card title="Bilgilendirme" icon={<BadgeInfo size={18} />}>
             <InfoBlock
               sprint1={sprint1}
               sprint2={sprint2}
@@ -805,7 +815,10 @@ function YoujiDeviceCard({
   const summary = report.youjiSummary;
 
   return (
-    <Card title="Sağlık Değerlendirme Verileri" icon={<Gauge size={18} />}>
+    <Card
+      title="Sağlık Değerlendirme Verileri"
+      icon={<Stethoscope size={18} />}
+    >
       <div style={styles.youjiCardBody}>
         <div style={styles.youjiQrBox}>
           {qrDataUrl ? (
