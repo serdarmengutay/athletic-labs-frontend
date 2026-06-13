@@ -236,6 +236,8 @@ export const mvpTestSessionApi = {
   ) => api.post(`/test-sessions/${testSessionId}/athletes`, { athletes }),
   getAthletes: (testSessionId: string) =>
     api.get(`/test-sessions/${testSessionId}/athletes`),
+  getMeasurements: (athleteTestId: string) =>
+    api.get(`/athlete-tests/${athleteTestId}/measurements`),
   downloadFieldData: (testSessionId: string) =>
     api.get<Blob>(`/test-sessions/${testSessionId}/field-data.xlsx`, {
       responseType: "blob",

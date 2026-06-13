@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -143,6 +143,7 @@ export default function TestDataEntryPage() {
   const [isImportingXOne, setIsImportingXOne] = useState(false);
   const [showXOneScanner, setShowXOneScanner] = useState(false);
   const [showXOneUrlFallback, setShowXOneUrlFallback] = useState(false);
+  const dirtyMeasurementKeysRef = useRef<Set<MeasurementKey>>(new Set());
   const sportConfig = useMemo(
     () => getSportTestConfig(testSessionSportType),
     [testSessionSportType]
@@ -430,13 +431,75 @@ export default function TestDataEntryPage() {
     }
   };
 
-  const handleAthleteClick = (index: number) => {
-    setSelectedAthleteIndex(index);
-    setCurrentMeasurements(filteredAthletes[index].measurements || {});
-    setViewState("detail");
+  const refreshFocusedAthlete = async (athleteTestId: string) => {
+    if (!navigator.onLine) return;
+    const response = await mvpTestSessionApi.getMeasurements(athleteTestId);
+    const fresh = response.data?.data;
+    if (!fresh) return;
+    const backendMeasurements = (fresh.measurement || {}) as Measurements;
+
+    setCurrentMeasurements((current) => {
+      const merged = { ...backendMeasurements };
+      dirtyMeasurementKeysRef.current.forEach((key) => {
+        if (current[key] !== undefined) merged[key] = current[key];
+      });
+      return merged;
+    });
+    setAthletes((currentAthletes) => {
+      const nextAthletes = currentAthletes.map((athlete) =>
+        athlete.athleteTestId === athleteTestId
+          ? {
+              ...athlete,
+              measurements: backendMeasurements,
+              status: fresh.status || athlete.status,
+              xOneQrImported: Boolean(fresh.xOneQrImported),
+              xOneReportId: fresh.xOneReportId || undefined,
+              xOneImportedAt: fresh.xOneImportedAt || undefined,
+            }
+          : athlete
+      );
+      localStorage.setItem("parsedAthletes", JSON.stringify(nextAthletes));
+      return nextAthletes;
+    });
   };
 
+  useEffect(() => {
+    const athleteTestId =
+      viewState === "detail" ? selectedAthlete?.athleteTestId : undefined;
+    if (!athleteTestId) return;
+
+    const refresh = () => {
+      refreshFocusedAthlete(athleteTestId).catch((error) =>
+        console.error("Canlı ölçüm senkronizasyonu başarısız:", error)
+      );
+    };
+    const intervalId = window.setInterval(refresh, 2500);
+    window.addEventListener("focus", refresh);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [viewState, selectedAthlete?.athleteTestId, testSessionId]);
+
+  const openAthlete = (index: number) => {
+    const athlete = filteredAthletes[index];
+    if (!athlete) return;
+    dirtyMeasurementKeysRef.current.clear();
+    setSelectedAthleteIndex(index);
+    setCurrentMeasurements(athlete.measurements || {});
+    setViewState("detail");
+    if (athlete.athleteTestId) {
+      refreshFocusedAthlete(athlete.athleteTestId).catch((error) =>
+        console.error("Sporcu ölçümleri yenilenemedi:", error)
+      );
+    }
+  };
+
+  const handleAthleteClick = (index: number) => openAthlete(index);
+
   const handleMeasurementChange = (key: string, value: string) => {
+    dirtyMeasurementKeysRef.current.add(key as MeasurementKey);
     const numValue = value === "" ? undefined : parseFloat(value);
     setCurrentMeasurements((prev) => ({ ...prev, [key]: numValue }));
   };
@@ -451,30 +514,40 @@ export default function TestDataEntryPage() {
       return;
     }
 
-    const updatedAthletes = athletes.map((a) => {
-      if (
-        a.fullName === selectedAthlete.fullName &&
-        a.birthDate === selectedAthlete.birthDate
-      ) {
-        return { ...a, measurements: currentMeasurements };
-      }
-      return a;
-    });
-    persistAthletes(updatedAthletes);
+    const changedMeasurements = Object.fromEntries(
+      [...dirtyMeasurementKeysRef.current]
+        .map((key) => [key, currentMeasurements[key]])
+        .filter(([, value]) => value !== undefined)
+    ) as Measurements;
+
+    if (Object.keys(changedMeasurements).length === 0) {
+      await refreshFocusedAthlete(selectedAthlete.athleteTestId);
+      setSaveStatus("synced");
+      return;
+    }
 
     try {
       const queuedSave = await queueMeasurementSave(
         selectedAthlete.athleteTestId,
-        currentMeasurements
+        changedMeasurements
       );
-      await mvpTestSessionApi.saveMeasurements(
+      const response = await mvpTestSessionApi.saveMeasurements(
         selectedAthlete.athleteTestId,
-        currentMeasurements
+        changedMeasurements
       );
       await removeQueuedMeasurementSave(queuedSave.id);
+      dirtyMeasurementKeysRef.current.clear();
+      const savedMeasurements = response.data?.data || currentMeasurements;
+      setCurrentMeasurements(savedMeasurements);
+      const updatedAthletes = athletes.map((athlete) =>
+        getAthleteKey(athlete) === getAthleteKey(selectedAthlete)
+          ? { ...athlete, measurements: savedMeasurements }
+          : athlete
+      );
+      persistAthletes(updatedAthletes);
       console.log("Sporcu backend'e kaydedildi:", {
         ...selectedAthlete,
-        measurements: currentMeasurements,
+        measurements: savedMeasurements,
       });
       setSaveStatus("synced");
       setShowSaveSuccess(true);
@@ -492,8 +565,7 @@ export default function TestDataEntryPage() {
   const handlePrevAthlete = () => {
     if (selectedAthleteIndex > 0) {
       const newIndex = selectedAthleteIndex - 1;
-      setSelectedAthleteIndex(newIndex);
-      setCurrentMeasurements(filteredAthletes[newIndex].measurements || {});
+      openAthlete(newIndex);
       triggerAthleteChangeAnim();
     }
   };
@@ -501,8 +573,7 @@ export default function TestDataEntryPage() {
   const handleNextAthlete = () => {
     if (selectedAthleteIndex < filteredAthletes.length - 1) {
       const newIndex = selectedAthleteIndex + 1;
-      setSelectedAthleteIndex(newIndex);
-      setCurrentMeasurements(filteredAthletes[newIndex].measurements || {});
+      openAthlete(newIndex);
       triggerAthleteChangeAnim();
     }
   };

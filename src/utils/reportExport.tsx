@@ -53,10 +53,13 @@ function sanitizeFileName(name: string): string {
 
 async function loadAssetAsDataUrl(path: string): Promise<string | undefined> {
   try {
-    const response = await fetch(path, { cache: "force-cache" });
+    const assetUrl = new URL(path, window.location.origin);
+    assetUrl.searchParams.set("v", "20260613");
+    const response = await fetch(assetUrl.toString(), { cache: "no-store" });
     if (!response.ok) return undefined;
     const blob = await response.blob();
-    return await new Promise<string>((resolve, reject) => {
+    if (!blob.type.startsWith("image/")) return undefined;
+    const dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () =>
         typeof reader.result === "string"
@@ -65,6 +68,10 @@ async function loadAssetAsDataUrl(path: string): Promise<string | undefined> {
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(blob);
     });
+    const image = new Image();
+    image.src = dataUrl;
+    await image.decode();
+    return image.naturalWidth > 0 ? dataUrl : undefined;
   } catch {
     return undefined;
   }
@@ -118,7 +125,7 @@ async function renderReportToImage(
         : undefined;
     const logoDataUrl =
       exportableReport.kind === "session"
-        ? await loadAssetAsDataUrl("/athleticlabs_logo.png")
+        ? await loadAssetAsDataUrl("/athleticlabs_logo_export.png")
         : undefined;
 
     const reportElement =
