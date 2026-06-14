@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Camera, CheckCircle, Keyboard, Loader2, X } from "lucide-react";
-import { BrowserMultiFormatReader } from "@zxing/library";
+import { BrowserQRCodeReader } from "@zxing/library";
 
 interface QRScannerProps {
   onScan: (data: string) => void;
@@ -20,8 +20,31 @@ interface BrowserError {
   message?: string;
 }
 
+interface CameraCapabilities extends MediaTrackCapabilities {
+  focusMode?: string[];
+}
+
 const getBrowserError = (error: unknown): BrowserError =>
   error instanceof Error ? error : {};
+
+const improveCameraFocus = async (video: HTMLVideoElement) => {
+  const stream = video.srcObject;
+  if (!(stream instanceof MediaStream)) return;
+
+  const track = stream.getVideoTracks()[0];
+  if (!track?.getCapabilities) return;
+
+  const capabilities = track.getCapabilities() as CameraCapabilities;
+  if (!capabilities.focusMode?.includes("continuous")) return;
+
+  try {
+    await track.applyConstraints({
+      advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
+    });
+  } catch {
+    // Some mobile browsers report focus support but reject manual constraints.
+  }
+};
 
 export default function QRScanner({
   onScan,
@@ -41,7 +64,7 @@ export default function QRScanner({
   const [manualValue, setManualValue] = useState("");
   const [showManualFallback, setShowManualFallback] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  const readerRef = useRef<BrowserQRCodeReader | null>(null);
   const hasScannedRef = useRef(false);
   const onScanRef = useRef(onScan);
 
@@ -84,10 +107,19 @@ export default function QRScanner({
           throw new Error("Video alanı hazır değil. Lütfen tekrar deneyin.");
         }
 
-        const reader = new BrowserMultiFormatReader();
+        const reader = new BrowserQRCodeReader(150);
         readerRef.current = reader;
-        await reader.decodeFromVideoDevice(
-          deviceId,
+        await reader.decodeFromConstraints(
+          {
+            audio: false,
+            video: {
+              deviceId: { exact: deviceId },
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              frameRate: { ideal: 30 },
+            },
+          },
           videoRef.current,
           (result, scanError) => {
             if (result) {
@@ -98,6 +130,7 @@ export default function QRScanner({
             }
           }
         );
+        await improveCameraFocus(videoRef.current);
       } catch (err: unknown) {
         const browserError = getBrowserError(err);
         setError(
@@ -131,10 +164,12 @@ export default function QRScanner({
       const permissionStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
         },
       });
+      const permissionDeviceId =
+        permissionStream.getVideoTracks()[0]?.getSettings().deviceId;
       permissionStream.getTracks().forEach((track) => track.stop());
 
       const refreshedDevices = await navigator.mediaDevices.enumerateDevices();
@@ -149,9 +184,13 @@ export default function QRScanner({
       }
 
       const rearCamera =
+        availableDevices.find(
+          (device) => device.deviceId === permissionDeviceId
+        ) ||
         availableDevices.find((device) =>
           /back|rear|environment|arka/i.test(device.label)
-        ) || availableDevices[0];
+        ) ||
+        availableDevices[0];
 
       setDevices(availableDevices);
       setSelectedDevice(rearCamera.deviceId);
