@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Camera, CheckCircle, Keyboard, Loader2, X } from "lucide-react";
-import { BrowserQRCodeReader } from "@zxing/library";
+import { Scanner } from "@yudiel/react-qr-scanner";
 
 interface QRScannerProps {
   onScan: (data: string) => void;
@@ -20,31 +20,8 @@ interface BrowserError {
   message?: string;
 }
 
-interface CameraCapabilities extends MediaTrackCapabilities {
-  focusMode?: string[];
-}
-
 const getBrowserError = (error: unknown): BrowserError =>
   error instanceof Error ? error : {};
-
-const improveCameraFocus = async (video: HTMLVideoElement) => {
-  const stream = video.srcObject;
-  if (!(stream instanceof MediaStream)) return;
-
-  const track = stream.getVideoTracks()[0];
-  if (!track?.getCapabilities) return;
-
-  const capabilities = track.getCapabilities() as CameraCapabilities;
-  if (!capabilities.focusMode?.includes("continuous")) return;
-
-  try {
-    await track.applyConstraints({
-      advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
-    });
-  } catch {
-    // Some mobile browsers report focus support but reject manual constraints.
-  }
-};
 
 export default function QRScanner({
   onScan,
@@ -63,8 +40,6 @@ export default function QRScanner({
   const [selectedDevice, setSelectedDevice] = useState("");
   const [manualValue, setManualValue] = useState("");
   const [showManualFallback, setShowManualFallback] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const readerRef = useRef<BrowserQRCodeReader | null>(null);
   const hasScannedRef = useRef(false);
   const onScanRef = useRef(onScan);
 
@@ -73,10 +48,6 @@ export default function QRScanner({
   }, [onScan]);
 
   const stopScanning = useCallback(() => {
-    if (readerRef.current) {
-      readerRef.current.reset();
-      readerRef.current = null;
-    }
     setIsScanning(false);
   }, []);
 
@@ -90,58 +61,6 @@ export default function QRScanner({
       onScanRef.current(cleanData);
     },
     [stopScanning]
-  );
-
-  const startScanning = useCallback(
-    async (deviceId: string) => {
-      if (!deviceId) {
-        setError("Kamera seçilemedi.");
-        return;
-      }
-
-      try {
-        setError("");
-        setIsScanning(true);
-
-        if (!videoRef.current) {
-          throw new Error("Video alanı hazır değil. Lütfen tekrar deneyin.");
-        }
-
-        const reader = new BrowserQRCodeReader(150);
-        readerRef.current = reader;
-        await reader.decodeFromConstraints(
-          {
-            audio: false,
-            video: {
-              deviceId: { exact: deviceId },
-              facingMode: { ideal: "environment" },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-              frameRate: { ideal: 30 },
-            },
-          },
-          videoRef.current,
-          (result, scanError) => {
-            if (result) {
-              handleScan(result.getText());
-            }
-            if (scanError && scanError.name !== "NotFoundException") {
-              setError("QR kod okunamadı. Kodu kameraya biraz daha net gösterin.");
-            }
-          }
-        );
-        await improveCameraFocus(videoRef.current);
-      } catch (err: unknown) {
-        const browserError = getBrowserError(err);
-        setError(
-          "Kamera başlatılamadı. Tablet/telefonda kamera iznini verin; canlı ortamda sayfa HTTPS üzerinden açılmalı. " +
-            (browserError.message || "")
-        );
-        setShowManualFallback(true);
-        setIsScanning(false);
-      }
-    },
-    [handleScan]
   );
 
   const prepareAndStartCamera = useCallback(async () => {
@@ -194,7 +113,7 @@ export default function QRScanner({
 
       setDevices(availableDevices);
       setSelectedDevice(rearCamera.deviceId);
-      requestAnimationFrame(() => startScanning(rearCamera.deviceId));
+      setIsScanning(true);
     } catch (err: unknown) {
       const browserError = getBrowserError(err);
 
@@ -214,10 +133,11 @@ export default function QRScanner({
         setError(browserError.message || "Kamera erişimi başlatılamadı.");
       }
       setShowManualFallback(true);
+      setIsScanning(false);
     } finally {
       setIsPreparing(false);
     }
-  }, [startScanning, stopScanning]);
+  }, [stopScanning]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -236,9 +156,9 @@ export default function QRScanner({
   }, [isOpen, prepareAndStartCamera, stopScanning]);
 
   const handleDeviceChange = (deviceId: string) => {
+    setIsScanning(false);
     setSelectedDevice(deviceId);
-    stopScanning();
-    requestAnimationFrame(() => startScanning(deviceId));
+    requestAnimationFrame(() => setIsScanning(true));
   };
 
   if (!isOpen) return null;
@@ -265,15 +185,50 @@ export default function QRScanner({
 
         <div className="space-y-4 p-5">
           <div className="relative h-80 overflow-hidden rounded-xl border border-slate-700 bg-black">
-            <video
-              ref={videoRef}
-              className={`h-full w-full object-cover ${
-                isScanning ? "opacity-100" : "opacity-25"
-              }`}
-              autoPlay
-              playsInline
-              muted
-            />
+            {isScanning && selectedDevice && (
+              <Scanner
+                key={selectedDevice}
+                onScan={(detectedCodes) => {
+                  const qrValue = detectedCodes[0]?.rawValue;
+                  if (qrValue) handleScan(qrValue);
+                }}
+                onError={(scanError) => {
+                  const browserError = getBrowserError(scanError);
+                  setError(
+                    "QR tarayıcı başlatılamadı. Kamera iznini kontrol edip tekrar deneyin. " +
+                      (browserError.message || "")
+                  );
+                  setShowManualFallback(true);
+                }}
+                formats={["qr_code"]}
+                scanDelay={100}
+                allowMultiple={false}
+                constraints={{
+                  deviceId: { exact: selectedDevice },
+                  facingMode: { ideal: "environment" },
+                  width: { ideal: 1920 },
+                  height: { ideal: 1080 },
+                  frameRate: { ideal: 30 },
+                }}
+                components={{
+                  finder: false,
+                  torch: true,
+                  zoom: true,
+                  onOff: false,
+                }}
+                styles={{
+                  container: {
+                    width: "100%",
+                    height: "100%",
+                  },
+                  video: {
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  },
+                }}
+              />
+            )}
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="relative h-48 w-48 rounded-2xl border-2 border-[#e4fc55]/90">
                 <div className="absolute -left-1 -top-1 h-8 w-8 border-l-4 border-t-4 border-[#e4fc55]" />
