@@ -495,7 +495,7 @@ function resolveRadarScore(
   if (backendScore !== null) return backendScore;
 
   if (metric.percentile !== null && Number.isFinite(metric.percentile)) {
-    return normalizeScore(metric.percentile);
+    return normalizeScore(100 - metric.percentile);
   }
 
   if (
@@ -792,7 +792,7 @@ function MvpAthleteReport({
     .map((item) => item.athleteScore)
     .filter((score): score is number => score !== null);
   const overallPercentile =
-    report.overallPerformance > 0
+    Number.isFinite(report.overallPerformance)
       ? report.overallPerformance
       : availableRadarScores.length > 0
       ? availableRadarScores.reduce((sum, score) => sum + score, 0) /
@@ -865,7 +865,7 @@ function MvpAthleteReport({
             <div style={styles.overallBox}>
               %{overallPercentile.toFixed(1)}
             </div>
-            <div style={styles.overallLabel}>Yüzdelik Dilim</div>
+            <div style={styles.overallLabel}>En İyi Yüzdelik Dilim</div>
           </Card>
         </section>
 
