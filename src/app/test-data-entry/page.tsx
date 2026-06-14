@@ -694,7 +694,7 @@ export default function TestDataEntryPage() {
       }));
 
       // Export to ZIP with progress callback
-      await exportReportsToZip(
+      const exportResult = await exportReportsToZip(
         reportSession,
         testSessionName || "Test_Oturumu",
         (current, total) => {
@@ -705,14 +705,22 @@ export default function TestDataEntryPage() {
       // Mark as completed
       setIsTestCompleted(true);
 
-      // Console log for debugging
       console.log("========================================");
       console.log("TEST OTURUMU TAMAMLANDI - RAPORLAR İNDİRİLDİ");
       console.log("========================================");
-      console.log(`Toplam ${reportSession.athletes.length} rapor export edildi`);
+      console.log(`Toplam ${exportResult.exportedCount} rapor export edildi`);
+      if (exportResult.failedReports.length > 0) {
+        alert(
+          `${exportResult.exportedCount} karne oluşturuldu. ${exportResult.failedReports.length} karne oluşturulamadı; isimleri indirilen ZIP içindeki OLUSTURULAMAYAN_KARNELER.txt dosyasında yer alıyor.`
+        );
+      }
     } catch (error) {
       console.error("Export error:", error);
-      alert("Raporlar export edilirken hata oluştu. Lütfen tekrar deneyin.");
+      alert(
+        error instanceof Error
+          ? `Raporlar oluşturulamadı: ${error.message}`
+          : "Raporlar export edilirken hata oluştu. Lütfen tekrar deneyin."
+      );
     } finally {
       setIsExporting(false);
       setExportProgress({ current: 0, total: 0 });

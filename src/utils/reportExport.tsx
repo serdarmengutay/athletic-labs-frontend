@@ -1,4 +1,4 @@
-import { toPng } from "html-to-image";
+import { toJpeg } from "html-to-image";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import QRCode from "qrcode";
@@ -36,6 +36,11 @@ import {
 
 const REPORT_WIDTH = 1400;
 const REPORT_HEIGHT = 1127;
+const REPORT_PIXEL_RATIO = 1.5;
+const REPORT_JPEG_QUALITY = 0.9;
+const REPORT_RENDER_RETRY_PIXEL_RATIO = 1;
+
+let cachedLogoDataUrl: string | undefined;
 
 type ExportableReport =
   | { kind: "legacy"; report: AthleteReportResponse }
@@ -50,6 +55,11 @@ type ExportableReport =
       logoDataUrl?: string;
     };
 
+export interface ReportExportResult {
+  exportedCount: number;
+  failedReports: string[];
+}
+
 function sanitizeFileName(name: string): string {
   return name
     .replace(/[^a-zA-Z0-9ğüşıöçĞÜŞİÖÇ\s]/g, "")
@@ -58,6 +68,10 @@ function sanitizeFileName(name: string): string {
 }
 
 async function loadAssetAsDataUrl(path: string): Promise<string | undefined> {
+  if (path === "/athleticlabs_logo_export.png" && cachedLogoDataUrl) {
+    return cachedLogoDataUrl;
+  }
+
   try {
     const assetUrl = new URL(path, window.location.origin);
     assetUrl.searchParams.set("v", "20260613");
@@ -77,7 +91,11 @@ async function loadAssetAsDataUrl(path: string): Promise<string | undefined> {
     const image = new Image();
     image.src = dataUrl;
     await image.decode();
-    return image.naturalWidth > 0 ? dataUrl : undefined;
+    const validDataUrl = image.naturalWidth > 0 ? dataUrl : undefined;
+    if (path === "/athleticlabs_logo_export.png") {
+      cachedLogoDataUrl = validDataUrl;
+    }
+    return validDataUrl;
   } catch {
     return undefined;
   }
@@ -104,7 +122,8 @@ async function waitForReportAssets(container: HTMLElement): Promise<void> {
 }
 
 async function renderReportToImage(
-  exportableReport: ExportableReport
+  exportableReport: ExportableReport,
+  pixelRatio = REPORT_PIXEL_RATIO
 ): Promise<Blob> {
   const container = document.createElement("div");
   container.id = "report-export-container";
@@ -152,11 +171,12 @@ async function renderReportToImage(
     });
     await waitForReportAssets(container);
 
-    const dataUrl = await toPng(container, {
+    const dataUrl = await toJpeg(container, {
       width: REPORT_WIDTH,
       height: REPORT_HEIGHT,
       cacheBust: true,
-      pixelRatio: 2,
+      pixelRatio,
+      quality: REPORT_JPEG_QUALITY,
       backgroundColor: "#06110f",
       style: {
         width: `${REPORT_WIDTH}px`,
@@ -174,13 +194,34 @@ async function renderReportToImage(
   }
 }
 
+async function renderReportWithRetry(
+  exportableReport: ExportableReport
+): Promise<Blob> {
+  try {
+    return await renderReportToImage(exportableReport);
+  } catch (firstError) {
+    console.warn(
+      "Karne yüksek çözünürlükte oluşturulamadı, düşük bellek modu deneniyor:",
+      firstError
+    );
+    return renderReportToImage(
+      exportableReport,
+      REPORT_RENDER_RETRY_PIXEL_RATIO
+    );
+  }
+}
+
+const yieldToBrowser = () =>
+  new Promise<void>((resolve) => window.setTimeout(resolve, 30));
+
 export async function exportReportsToZip(
   reports: AthleteReportResponse[] | SessionReportResponse,
   sessionName: string,
   onProgress?: (current: number, total: number) => void
-): Promise<void> {
+): Promise<ReportExportResult> {
   const zip = new JSZip();
   const exportableReports = normalizeReports(reports);
+  const failedReports: string[] = [];
 
   for (let i = 0; i < exportableReports.length; i++) {
     const exportableReport = exportableReports[i];
@@ -190,7 +231,7 @@ export async function exportReportsToZip(
     }
 
     try {
-      const imageBlob = await renderReportToImage(exportableReport);
+      const imageBlob = await renderReportWithRetry(exportableReport);
       const index = String(i + 1).padStart(3, "0");
       const fullName =
         exportableReport.kind === "legacy"
@@ -205,20 +246,41 @@ export async function exportReportsToZip(
           ? exportableReport.report.athlete.fullName
           : exportableReport.report.fullName;
       console.error(`Failed to export report for ${fullName}:`, error);
+      failedReports.push(fullName);
     }
+
+    // Give mobile browsers a chance to release the previous render canvas.
+    await yieldToBrowser();
   }
 
   if (Object.keys(zip.files).length === 0) {
     throw new Error("Hiçbir karne görseli oluşturulamadı.");
   }
 
+  if (failedReports.length > 0) {
+    zip.file(
+      "OLUSTURULAMAYAN_KARNELER.txt",
+      [
+        "Aşağıdaki karneler oluşturulamadı:",
+        "",
+        ...failedReports.map((name) => `- ${name}`),
+        "",
+        "Bu sporcuların verilerini kontrol edip karneleri yeniden oluşturun.",
+      ].join("\n")
+    );
+  }
+
   const zipBlob = await zip.generateAsync({
     type: "blob",
-    compression: "DEFLATE",
-    compressionOptions: { level: 6 },
+    compression: "STORE",
+    streamFiles: true,
   });
 
   saveAs(zipBlob, `${sanitizeFileName(sessionName)}_raporlar.zip`);
+  return {
+    exportedCount: exportableReports.length - failedReports.length,
+    failedReports,
+  };
 }
 
 function normalizeReports(
