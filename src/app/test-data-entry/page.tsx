@@ -42,6 +42,7 @@ import {
   removeQueuedXOneQrImport,
   updateQueuedXOneQrImport,
 } from "@/lib/offlineMeasurements";
+import { normalizeSprintMeasurements } from "@/lib/normalizeSprintMeasurements";
 
 type Measurements = Partial<Record<MeasurementKey, number>>;
 
@@ -518,11 +519,27 @@ export default function TestDataEntryPage() {
       return;
     }
 
-    const changedMeasurements = Object.fromEntries(
+    let changedMeasurements = Object.fromEntries(
       [...dirtyMeasurementKeysRef.current]
         .map((key) => [key, currentMeasurements[key]])
         .filter(([, value]) => value !== undefined)
     ) as Measurements;
+
+    if (
+      dirtyMeasurementKeysRef.current.has("sprint30m") ||
+      dirtyMeasurementKeysRef.current.has("sprint30mSecond")
+    ) {
+      const normalized = normalizeSprintMeasurements(currentMeasurements);
+      changedMeasurements = {
+        ...changedMeasurements,
+        ...(normalized.sprint30m !== undefined
+          ? { sprint30m: normalized.sprint30m }
+          : {}),
+        ...(normalized.sprint30mSecond !== undefined
+          ? { sprint30mSecond: normalized.sprint30mSecond }
+          : {}),
+      };
+    }
 
     if (Object.keys(changedMeasurements).length === 0) {
       await refreshFocusedAthlete(selectedAthlete.athleteTestId);
@@ -711,13 +728,16 @@ export default function TestDataEntryPage() {
           .filter((athlete) => athlete.athleteId)
           .map((athlete) => [athlete.athleteId, athlete.measurements])
       );
-      reportSession.athletes = reportSession.athletes.map((report) => ({
-        ...report,
-        measurements: {
+      reportSession.athletes = reportSession.athletes.map((report) => {
+        const measurements = normalizeSprintMeasurements({
           ...report.measurements,
           ...measurementByAthleteId.get(report.athleteId),
-        },
-      }));
+        });
+        return {
+          ...report,
+          measurements,
+        };
+      });
 
       // Export to ZIP with progress callback
       const exportResult = await exportReportsToZip(

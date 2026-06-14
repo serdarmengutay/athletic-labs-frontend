@@ -11,6 +11,7 @@ import {
 import { createElement, type CSSProperties, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import AthleteReport from "@/components/AthleteReport";
+import { normalizeSprintMeasurements } from "@/lib/normalizeSprintMeasurements";
 import {
   Activity,
   ArrowUp10,
@@ -559,7 +560,7 @@ function MvpAthleteReport({
   logoDataUrl?: string;
 }) {
   const m = report.metrics;
-  const measurements = report.measurements || {};
+  const measurements = normalizeSprintMeasurements(report.measurements || {});
   const passMetric = m.passCount ?? {
     value: measurements.passCount ?? null,
     percentile: null,
