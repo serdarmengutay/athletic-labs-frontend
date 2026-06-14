@@ -36,9 +36,10 @@ import {
 
 const REPORT_WIDTH = 1400;
 const REPORT_HEIGHT = 1127;
-const REPORT_PIXEL_RATIO = 1.5;
-const REPORT_JPEG_QUALITY = 0.9;
-const REPORT_RENDER_RETRY_PIXEL_RATIO = 1;
+const REPORT_PIXEL_RATIO = 2;
+const REPORT_JPEG_QUALITY = 0.95;
+const REPORT_RENDER_RETRY_PIXEL_RATIO = 1.5;
+const REPORTS_PER_ZIP = 10;
 
 let cachedLogoDataUrl: string | undefined;
 
@@ -58,6 +59,7 @@ type ExportableReport =
 export interface ReportExportResult {
   exportedCount: number;
   failedReports: string[];
+  archiveCount: number;
 }
 
 function sanitizeFileName(name: string): string {
@@ -219,67 +221,101 @@ export async function exportReportsToZip(
   sessionName: string,
   onProgress?: (current: number, total: number) => void
 ): Promise<ReportExportResult> {
-  const zip = new JSZip();
   const exportableReports = normalizeReports(reports);
   const failedReports: string[] = [];
+  let exportedCount = 0;
+  let archiveCount = 0;
 
-  for (let i = 0; i < exportableReports.length; i++) {
-    const exportableReport = exportableReports[i];
+  for (
+    let batchStart = 0;
+    batchStart < exportableReports.length;
+    batchStart += REPORTS_PER_ZIP
+  ) {
+    const zip = new JSZip();
+    const batch = exportableReports.slice(
+      batchStart,
+      batchStart + REPORTS_PER_ZIP
+    );
+    const batchFailedReports: string[] = [];
+    let batchExportedCount = 0;
 
-    if (onProgress) {
-      onProgress(i + 1, exportableReports.length);
+    for (let batchIndex = 0; batchIndex < batch.length; batchIndex++) {
+      const exportableReport = batch[batchIndex];
+      const reportIndex = batchStart + batchIndex;
+
+      if (onProgress) {
+        onProgress(reportIndex + 1, exportableReports.length);
+      }
+
+      try {
+        const imageBlob = await renderReportWithRetry(exportableReport);
+        const index = String(reportIndex + 1).padStart(3, "0");
+        const fullName =
+          exportableReport.kind === "legacy"
+            ? exportableReport.report.athlete.fullName
+            : exportableReport.report.fullName;
+        const fileName = `${index}_${sanitizeFileName(fullName)}_karne.jpg`;
+
+        zip.file(fileName, imageBlob);
+        batchExportedCount++;
+        exportedCount++;
+      } catch (error) {
+        const fullName =
+          exportableReport.kind === "legacy"
+            ? exportableReport.report.athlete.fullName
+            : exportableReport.report.fullName;
+        console.error(`Failed to export report for ${fullName}:`, error);
+        failedReports.push(fullName);
+        batchFailedReports.push(fullName);
+      }
+
+      await yieldToBrowser();
     }
 
-    try {
-      const imageBlob = await renderReportWithRetry(exportableReport);
-      const index = String(i + 1).padStart(3, "0");
-      const fullName =
-        exportableReport.kind === "legacy"
-          ? exportableReport.report.athlete.fullName
-          : exportableReport.report.fullName;
-      const fileName = `${index}_${sanitizeFileName(fullName)}_karne.jpg`;
-
-      zip.file(fileName, imageBlob);
-    } catch (error) {
-      const fullName =
-        exportableReport.kind === "legacy"
-          ? exportableReport.report.athlete.fullName
-          : exportableReport.report.fullName;
-      console.error(`Failed to export report for ${fullName}:`, error);
-      failedReports.push(fullName);
+    if (batchExportedCount === 0) {
+      continue;
     }
 
-    // Give mobile browsers a chance to release the previous render canvas.
-    await yieldToBrowser();
+    if (batchFailedReports.length > 0) {
+      zip.file(
+        "OLUSTURULAMAYAN_KARNELER.txt",
+        [
+          "Aşağıdaki karneler oluşturulamadı:",
+          "",
+          ...batchFailedReports.map((name) => `- ${name}`),
+          "",
+          "Bu sporcuların verilerini kontrol edip karneleri yeniden oluşturun.",
+        ].join("\n")
+      );
+    }
+
+    const zipBlob = await zip.generateAsync({
+      type: "blob",
+      compression: "STORE",
+      streamFiles: true,
+    });
+    const batchEnd = batchStart + batch.length;
+    const partNumber = String(archiveCount + 1).padStart(2, "0");
+    saveAs(
+      zipBlob,
+      `${sanitizeFileName(sessionName)}_karneler_${partNumber}_${String(
+        batchStart + 1
+      ).padStart(3, "0")}-${String(batchEnd).padStart(3, "0")}.zip`
+    );
+    archiveCount++;
+
+    // Separate downloads and release the completed archive before the next one.
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 750));
   }
 
-  if (Object.keys(zip.files).length === 0) {
+  if (exportedCount === 0) {
     throw new Error("Hiçbir karne görseli oluşturulamadı.");
   }
 
-  if (failedReports.length > 0) {
-    zip.file(
-      "OLUSTURULAMAYAN_KARNELER.txt",
-      [
-        "Aşağıdaki karneler oluşturulamadı:",
-        "",
-        ...failedReports.map((name) => `- ${name}`),
-        "",
-        "Bu sporcuların verilerini kontrol edip karneleri yeniden oluşturun.",
-      ].join("\n")
-    );
-  }
-
-  const zipBlob = await zip.generateAsync({
-    type: "blob",
-    compression: "STORE",
-    streamFiles: true,
-  });
-
-  saveAs(zipBlob, `${sanitizeFileName(sessionName)}_raporlar.zip`);
   return {
-    exportedCount: exportableReports.length - failedReports.length,
+    exportedCount,
     failedReports,
+    archiveCount,
   };
 }
 

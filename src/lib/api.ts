@@ -256,7 +256,10 @@ export const mvpTestSessionApi = {
       passCount?: number;
       handgrip?: number;
     }
-  ) => api.post(`/athlete-tests/${athleteTestId}/measurements`, data),
+  ) =>
+    api.post(`/athlete-tests/${athleteTestId}/measurements`, data, {
+      timeout: 30000,
+    }),
   updateAthleteStatus: (
     athleteTestId: string,
     data: {
@@ -265,7 +268,9 @@ export const mvpTestSessionApi = {
   ) => api.patch(`/athlete-tests/${athleteTestId}/status`, data),
   calculateReport: (testSessionId: string) =>
     api.post<SessionReportResponse>(
-      `/test-sessions/${testSessionId}/calculate-report`
+      `/test-sessions/${testSessionId}/calculate-report`,
+      undefined,
+      { timeout: 120000 }
     ),
   importXOneQr: (
     testSessionId: string,

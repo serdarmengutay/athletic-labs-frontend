@@ -658,14 +658,40 @@ export default function TestDataEntryPage() {
           Object.keys(athlete.measurements).length > 0
       );
 
-      for (let i = 0; i < athletesWithMeasurements.length; i++) {
-        const athlete = athletesWithMeasurements[i];
-        await mvpTestSessionApi.saveMeasurements(
-          athlete.athleteTestId!,
-          athlete.measurements!
+      const saveBatchSize = 4;
+      for (
+        let batchStart = 0;
+        batchStart < athletesWithMeasurements.length;
+        batchStart += saveBatchSize
+      ) {
+        const batch = athletesWithMeasurements.slice(
+          batchStart,
+          batchStart + saveBatchSize
         );
+        const results = await Promise.allSettled(
+          batch.map((athlete) =>
+            mvpTestSessionApi.saveMeasurements(
+              athlete.athleteTestId!,
+              athlete.measurements!
+            )
+          )
+        );
+
+        const failedAthletes = batch.filter(
+          (_, index) => results[index].status === "rejected"
+        );
+        for (const athlete of failedAthletes) {
+          await mvpTestSessionApi.saveMeasurements(
+            athlete.athleteTestId!,
+            athlete.measurements!
+          );
+        }
+
         setExportProgress({
-          current: i + 1,
+          current: Math.min(
+            batchStart + batch.length,
+            athletesWithMeasurements.length
+          ),
           total: athletesWithMeasurements.length,
         });
       }
@@ -708,10 +734,12 @@ export default function TestDataEntryPage() {
       console.log("========================================");
       console.log("TEST OTURUMU TAMAMLANDI - RAPORLAR İNDİRİLDİ");
       console.log("========================================");
-      console.log(`Toplam ${exportResult.exportedCount} rapor export edildi`);
+      console.log(
+        `Toplam ${exportResult.exportedCount} rapor ${exportResult.archiveCount} ZIP halinde export edildi`
+      );
       if (exportResult.failedReports.length > 0) {
         alert(
-          `${exportResult.exportedCount} karne oluşturuldu. ${exportResult.failedReports.length} karne oluşturulamadı; isimleri indirilen ZIP içindeki OLUSTURULAMAYAN_KARNELER.txt dosyasında yer alıyor.`
+          `${exportResult.exportedCount} karne ${exportResult.archiveCount} ZIP halinde oluşturuldu. ${exportResult.failedReports.length} karne oluşturulamadı; isimleri ilgili ZIP içindeki OLUSTURULAMAYAN_KARNELER.txt dosyasında yer alıyor.`
         );
       }
     } catch (error) {
