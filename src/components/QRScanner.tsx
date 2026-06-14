@@ -43,6 +43,11 @@ export default function QRScanner({
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const hasScannedRef = useRef(false);
+  const onScanRef = useRef(onScan);
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
 
   const stopScanning = useCallback(() => {
     if (readerRef.current) {
@@ -59,9 +64,9 @@ export default function QRScanner({
       if (!cleanData) return;
       hasScannedRef.current = true;
       stopScanning();
-      onScan(cleanData);
+      onScanRef.current(cleanData);
     },
-    [onScan, stopScanning]
+    [stopScanning]
   );
 
   const startScanning = useCallback(

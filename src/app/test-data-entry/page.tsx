@@ -464,9 +464,10 @@ export default function TestDataEntryPage() {
   useEffect(() => {
     const athleteTestId =
       viewState === "detail" ? selectedAthlete?.athleteTestId : undefined;
-    if (!athleteTestId) return;
+    if (!athleteTestId || showXOneScanner) return;
 
     const refresh = () => {
+      if (document.visibilityState !== "visible") return;
       refreshFocusedAthlete(athleteTestId).catch((error) =>
         console.error("Canlı ölçüm senkronizasyonu başarısız:", error)
       );
@@ -478,7 +479,12 @@ export default function TestDataEntryPage() {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", refresh);
     };
-  }, [viewState, selectedAthlete?.athleteTestId, testSessionId]);
+  }, [
+    viewState,
+    selectedAthlete?.athleteTestId,
+    testSessionId,
+    showXOneScanner,
+  ]);
 
   const openAthlete = (index: number) => {
     const athlete = filteredAthletes[index];
