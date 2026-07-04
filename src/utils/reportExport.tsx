@@ -223,6 +223,10 @@ export async function exportReportsToZip(
   onProgress?: (current: number, total: number) => void
 ): Promise<ReportExportResult> {
   const exportableReports = normalizeReports(reports);
+  const exportRunId = new Date()
+    .toISOString()
+    .replace(/\D/g, "")
+    .slice(0, 12);
   const failedReports: string[] = [];
   let exportedCount = 0;
   let archiveCount = 0;
@@ -299,7 +303,9 @@ export async function exportReportsToZip(
     const partNumber = String(archiveCount + 1).padStart(2, "0");
     saveAs(
       zipBlob,
-      `${sanitizeFileName(sessionName)}_karneler_${partNumber}_${String(
+      `${sanitizeFileName(
+        sessionName
+      )}_karneler_${exportRunId}_${partNumber}_${String(
         batchStart + 1
       ).padStart(3, "0")}-${String(batchEnd).padStart(3, "0")}.zip`
     );
