@@ -468,7 +468,7 @@ export default function TestSessionPage() {
                           e.target.value
                         )
                       }
-                      placeholder="Kulüp başkanı veya sorumlu kişi"
+                      placeholder="İletişim Kişisi"
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                       required
                     />
@@ -487,7 +487,7 @@ export default function TestSessionPage() {
                           e.target.value
                         )
                       }
-                      placeholder="+90 5XX XXX XX XX"
+                      placeholder="İletişim Telefonu"
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                       required
                     />
@@ -506,7 +506,7 @@ export default function TestSessionPage() {
                           e.target.value
                         )
                       }
-                      placeholder="ornek@kulup.com"
+                      placeholder="İletişim E-postası"
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                     />
                   </div>
@@ -520,7 +520,7 @@ export default function TestSessionPage() {
                       onChange={(e) =>
                         handleSessionDataChange("notes", e.target.value)
                       }
-                      placeholder="Test hakkında özel notlar..."
+                      placeholder="Notlar"
                       rows={3}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                     />

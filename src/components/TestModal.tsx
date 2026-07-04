@@ -173,7 +173,7 @@ export default function TestModal({
                 }
                 className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
                 rows={3}
-                placeholder="Test hakkında notlar..."
+                placeholder="Notlar"
               />
             </div>
 
@@ -237,7 +237,7 @@ export default function TestModal({
                     setFormData({ ...formData, flexibility: e.target.value })
                   }
                   className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-                  placeholder="7"
+                  placeholder="Esneklik"
                 />
               </div>
 
@@ -257,7 +257,7 @@ export default function TestModal({
                     })
                   }
                   className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-                  placeholder="4.98"
+                  placeholder="30m Sprint 1"
                 />
               </div>
             </div>
@@ -279,7 +279,7 @@ export default function TestModal({
                     })
                   }
                   className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-                  placeholder="5.12"
+                  placeholder="30m Sprint 2"
                 />
               </div>
 
@@ -296,7 +296,7 @@ export default function TestModal({
                     setFormData({ ...formData, agility: e.target.value })
                   }
                   className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-                  placeholder="18.42"
+                  placeholder="Çeviklik"
                 />
               </div>
             </div>
@@ -315,7 +315,7 @@ export default function TestModal({
                     setFormData({ ...formData, vertical_jump: e.target.value })
                   }
                   className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-                  placeholder="24.36"
+                  placeholder="Dikey Sıçrama"
                 />
               </div>
 
@@ -332,7 +332,7 @@ export default function TestModal({
                     setFormData({ ...formData, ffmi: e.target.value })
                   }
                   className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-                  placeholder="14.6"
+                  placeholder="FFMI"
                 />
               </div>
             </div>

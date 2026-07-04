@@ -5,13 +5,17 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
 const PUBLIC_ROUTES = ["/login"];
+const PUBLIC_ROUTE_PREFIXES = ["/kayit/"];
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
-  const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
+  const isPublicRoute =
+    PUBLIC_ROUTES.includes(pathname) ||
+    PUBLIC_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  const isLoginRoute = pathname === "/login";
 
   useEffect(() => {
     if (loading) return;
@@ -19,11 +23,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!user && !isPublicRoute) {
       // Unauthenticated user trying to access protected route
       router.replace("/login");
-    } else if (user && isPublicRoute) {
+    } else if (user && isLoginRoute) {
       // Authenticated user trying to access login page
       router.replace("/");
     }
-  }, [user, loading, isPublicRoute, pathname, router]);
+  }, [user, loading, isPublicRoute, isLoginRoute, pathname, router]);
 
   // Loading state
   if (loading) {
@@ -43,7 +47,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   // Prevent rendering login page for authenticated users
-  if (user && isPublicRoute) {
+  if (user && isLoginRoute) {
     return null;
   }
 

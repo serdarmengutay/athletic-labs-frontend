@@ -450,7 +450,7 @@ export default function DataEntryPage() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Sporcu ara (isim veya soyisim)"
+                  placeholder="Sporcu ara"
                   className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black text-lg"
                 />
               </div>

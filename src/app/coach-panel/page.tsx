@@ -253,7 +253,7 @@ export default function CoachPanel() {
                       onChange={(e) => setNotes(e.target.value)}
                       rows={3}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Test hakkında notlar..."
+                      placeholder="Notlar"
                     />
                   </div>
 

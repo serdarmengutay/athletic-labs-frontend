@@ -21,6 +21,14 @@ const api = axios.create({
   timeout: 10000, // 10 saniye timeout
 });
 
+const publicApi = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    "Content-Type": "application/json",
+  },
+  timeout: 15000,
+});
+
 async function waitForFirebaseUser(): Promise<User | null> {
   if (typeof window === "undefined") {
     return null;
@@ -225,6 +233,21 @@ export const mvpTestSessionApi = {
     testDate: string;
     notes?: string;
   }) => api.post("/test-sessions", data),
+  update: (
+    id: string,
+    data: {
+      clubName?: string;
+      clubResponsibleName?: string;
+      clubResponsibleEmail?: string;
+      clubResponsiblePhone?: string;
+      city?: string;
+      sportType?: string;
+      valdEnabled?: boolean;
+      valdConfig?: ValdSessionConfig;
+      testDate?: string;
+      notes?: string;
+    }
+  ) => api.patch(`/test-sessions/${id}`, data),
   importAthletes: (
     testSessionId: string,
     athletes: {
@@ -279,6 +302,26 @@ export const mvpTestSessionApi = {
       qrUrl: string;
     }
   ) => api.post(`/test-sessions/${testSessionId}/x-one/import-qr`, data),
+};
+
+export const publicRegistrationApi = {
+  registerAthlete: (
+    testSessionSlug: string,
+    data: {
+      fullName: string;
+      birthDate: string;
+      parentPhone: string;
+    }
+  ) =>
+    publicApi.post<{
+      success: boolean;
+      message?: string;
+      data?: {
+        registrationId: string;
+        athleteTestId?: string;
+        athleteId?: string;
+      };
+    }>(`/public/test-sessions/${testSessionSlug}/registrations`, data),
 };
 
 export const scoutingApi = {

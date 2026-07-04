@@ -135,7 +135,7 @@ export default function AthleteModal({
                   setFormData({ ...formData, first_name: e.target.value })
                 }
                 className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-                placeholder="Mehmet"
+                placeholder="Ad"
               />
             </div>
 
@@ -151,7 +151,7 @@ export default function AthleteModal({
                   setFormData({ ...formData, last_name: e.target.value })
                 }
                 className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-                placeholder="Deviren"
+                placeholder="Soyad"
               />
             </div>
           </div>
@@ -185,7 +185,7 @@ export default function AthleteModal({
                   setFormData({ ...formData, height: e.target.value })
                 }
                 className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-                placeholder="153"
+                placeholder="Boy"
               />
             </div>
 
@@ -202,7 +202,7 @@ export default function AthleteModal({
                   setFormData({ ...formData, weight: e.target.value })
                 }
                 className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-                placeholder="48"
+                placeholder="Kilo"
               />
             </div>
           </div>

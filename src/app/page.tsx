@@ -271,11 +271,11 @@ export default function Home() {
 
             <div className="grid gap-5 md:grid-cols-2">
               {[
-                ["clubName", "Kulüp Adı", "Gençsaray Akademi", "text"],
-                ["clubResponsible", "Kulüp Yetkilisi", "Ad Soyad", "text"],
-                ["city", "Şehir", "İstanbul", "text"],
-                ["email", "İletişim E-postası", "yetkili@kulup.com", "email"],
-                ["phone", "Telefon", "0532 XXX XX XX", "tel"],
+                ["clubName", "Kulüp Adı", "Kulüp Adı", "text"],
+                ["clubResponsible", "Kulüp Yetkilisi", "Kulüp Yetkilisi", "text"],
+                ["city", "Şehir", "Şehir", "text"],
+                ["email", "İletişim E-postası", "İletişim E-postası", "email"],
+                ["phone", "Telefon", "Telefon", "tel"],
               ].map(([name, label, placeholder, type]) => (
                 <label key={name} className="block">
                   <span className="text-sm font-medium text-[#d6d6d8]">{label}</span>

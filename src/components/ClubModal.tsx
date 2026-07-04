@@ -66,7 +66,7 @@ export default function ClubModal({ onClose, onSuccess }: ClubModalProps) {
                 setFormData({ ...formData, name: e.target.value })
               }
               className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-              placeholder="Örn: Bursaspor"
+              placeholder="Kulüp Adı"
             />
           </div>
 
@@ -82,7 +82,7 @@ export default function ClubModal({ onClose, onSuccess }: ClubModalProps) {
                 setFormData({ ...formData, city: e.target.value })
               }
               className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-              placeholder="Örn: Bursa"
+              placeholder="Şehir"
             />
           </div>
 
@@ -101,7 +101,7 @@ export default function ClubModal({ onClose, onSuccess }: ClubModalProps) {
                 })
               }
               className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-              placeholder="Örn: Ahmet Yılmaz"
+              placeholder="İletişim Kişisi Adı"
             />
           </div>
 
@@ -120,7 +120,7 @@ export default function ClubModal({ onClose, onSuccess }: ClubModalProps) {
                 })
               }
               className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-              placeholder="Örn: 0532 123 45 67"
+              placeholder="İletişim Telefonu"
             />
           </div>
 
@@ -139,7 +139,7 @@ export default function ClubModal({ onClose, onSuccess }: ClubModalProps) {
                 })
               }
               className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white"
-              placeholder="Örn: ahmet@bursaspor.com"
+              placeholder="İletişim E-posta"
             />
           </div>
 

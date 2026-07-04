@@ -1198,7 +1198,7 @@ export default function TestDataEntryPage() {
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Sporcu ara..."
+                      placeholder="Sporcu ara"
                       className="w-full bg-slate-950 pl-9 pr-3 py-2 border border-[#2f403b] rounded-lg focus:ring-2 focus:ring-[#e4fc55] focus:border-[#d7f33d]/70 text-slate-100 text-sm"
                     />
                   </div>
@@ -1614,7 +1614,7 @@ export default function TestDataEntryPage() {
                     type="url"
                     value={xOneQrUrl}
                     onChange={(event) => setXOneQrUrl(event.target.value)}
-                    placeholder="https://... report_id=..."
+                    placeholder="Youji Rapor Linki"
                     className="min-w-0 flex-1 rounded-lg border border-[#2f403b] bg-slate-950 px-3 py-2 text-slate-100 focus:ring-2 focus:ring-[#e4fc55] focus:border-[#d7f33d]/70"
                     disabled={isImportingXOne}
                   />
