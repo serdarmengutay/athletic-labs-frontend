@@ -197,7 +197,7 @@ export default function PublicRegistrationPage() {
                 type="text"
                 autoComplete="name"
                 placeholder="Adı Soyadı"
-                className="mt-2 w-full rounded-2xl border border-white/10 !bg-[#091312] px-4 py-4 text-base !text-white outline-none transition placeholder:!text-[#6f6f73] focus:border-[#e4fc55]/80"
+                className="mt-2 block w-full min-w-0 max-w-full rounded-2xl border border-white/10 !bg-[#091312] px-4 py-4 text-base !text-white outline-none transition placeholder:!text-[#6f6f73] focus:border-[#e4fc55]/80"
                 aria-invalid={Boolean(errors.fullName)}
               />
               {errors.fullName && (
@@ -211,14 +211,18 @@ export default function PublicRegistrationPage() {
               <span className="text-sm font-semibold text-[#d6d6d8]">
                 Doğum Tarihi
               </span>
-              <input
-                value={form.birthDate}
-                onChange={(event) => updateField("birthDate", event.target.value)}
-                type="date"
-                max={today}
-                className="mt-2 w-full rounded-2xl border border-white/10 !bg-[#091312] px-4 py-4 text-base !text-white outline-none transition focus:border-[#e4fc55]/80"
-                aria-invalid={Boolean(errors.birthDate)}
-              />
+              <div className="mt-2 w-full max-w-full overflow-hidden rounded-2xl border border-white/10 bg-[#091312] transition focus-within:border-[#e4fc55]/80">
+                <input
+                  value={form.birthDate}
+                  onChange={(event) =>
+                    updateField("birthDate", event.target.value)
+                  }
+                  type="date"
+                  max={today}
+                  className="block h-[58px] w-full min-w-0 max-w-full appearance-none border-0 !bg-[#091312] px-4 py-0 text-base leading-none !text-white outline-none [color-scheme:dark]"
+                  aria-invalid={Boolean(errors.birthDate)}
+                />
+              </div>
               {errors.birthDate && (
                 <p className="mt-2 text-sm font-medium text-[#c03744]">
                   {errors.birthDate}
