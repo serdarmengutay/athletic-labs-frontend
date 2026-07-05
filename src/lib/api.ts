@@ -124,9 +124,9 @@ export const clubApi = {
     contact_phone: string;
     contact_email: string;
   }) => api.post("/clubs", data),
-  update: (
-    id: string,
-    data: {
+	  update: (
+	    id: string,
+	    data: {
       name: string;
       city: string;
       contact_person: string;
@@ -246,9 +246,11 @@ export const mvpTestSessionApi = {
       valdConfig?: ValdSessionConfig;
       testDate?: string;
       notes?: string;
-    }
-  ) => api.patch(`/test-sessions/${id}`, data),
-  importAthletes: (
+	    }
+	  ) => api.patch(`/test-sessions/${id}`, data),
+	  delete: (id: string, deletePassword: string) =>
+	    api.delete(`/test-sessions/${id}`, { data: { deletePassword } }),
+	  importAthletes: (
     testSessionId: string,
     athletes: {
       fullName: string;

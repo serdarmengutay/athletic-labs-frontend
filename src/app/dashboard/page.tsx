@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
+  AlertTriangle,
   CalendarDays,
   CheckCircle2,
   ClipboardList,
@@ -14,6 +15,7 @@ import {
   Printer,
   QrCode,
   Save,
+  Trash2,
   Users,
   X,
 } from "lucide-react";
@@ -50,6 +52,7 @@ const REGISTRATION_BASE_URL =
   (process.env.NODE_ENV === "production"
     ? DEFAULT_PRODUCTION_REGISTRATION_BASE_URL
     : undefined);
+const TEST_SESSION_DELETE_PASSWORD = "080826";
 
 function escapeHtml(value: string): string {
   return value
@@ -58,6 +61,21 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+async function loadImageAsDataUrl(src: string): Promise<string> {
+  const response = await fetch(src);
+  if (!response.ok) {
+    throw new Error(`Image load failed: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 export default function Dashboard() {
@@ -79,7 +97,14 @@ export default function Dashboard() {
   const [copyMessage, setCopyMessage] = useState("");
   const [qrSession, setQrSession] = useState<DashboardSession | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const [qrLogoDataUrl, setQrLogoDataUrl] = useState("");
   const [qrError, setQrError] = useState("");
+  const [deletingSession, setDeletingSession] = useState<DashboardSession | null>(
+    null
+  );
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
 
   const loadSessions = async () => {
     try {
@@ -164,26 +189,30 @@ export default function Dashboard() {
     const link = getRegistrationLink(session);
     setQrSession(session);
     setQrDataUrl("");
+    setQrLogoDataUrl("");
     setQrError("");
 
     try {
-      const dataUrl = await QRCode.toDataURL(link, {
-        errorCorrectionLevel: "M",
-        margin: 1,
-        width: 720,
-      });
+      const [dataUrl, logoDataUrl] = await Promise.all([
+        QRCode.toDataURL(link, {
+          errorCorrectionLevel: "M",
+          margin: 1,
+          width: 720,
+        }),
+        loadImageAsDataUrl("/athleticlabs_logo.png"),
+      ]);
       setQrDataUrl(dataUrl);
+      setQrLogoDataUrl(logoDataUrl);
     } catch (error) {
       console.error("Kayıt QR oluşturulamadı:", error);
       setQrError("QR oluşturulamadı. Linki kopyalayıp tekrar deneyin.");
     }
   };
 
-  const printRegistrationQr = () => {
-    if (!qrSession || !qrDataUrl) return;
+  const printRegistrationQr = async () => {
+    if (!qrSession || !qrDataUrl || !qrLogoDataUrl) return;
 
     const escapedClubName = escapeHtml(qrSession.clubName);
-    const logoUrl = `${window.location.origin}/athleticlabs_logo.png`;
     const printWindow = window.open("", "_blank", "width=900,height=1100");
     if (!printWindow) {
       alert("Yazdırma penceresi açılamadı. Tarayıcı pop-up iznini kontrol edin.");
@@ -229,6 +258,7 @@ export default function Dashboard() {
               width: 54px;
               height: 54px;
               border-radius: 999px;
+              object-fit: cover;
             }
             h1 {
               margin: 0;
@@ -257,7 +287,7 @@ export default function Dashboard() {
         <body>
           <main class="sheet">
             <div class="brand">
-              <img src="${logoUrl}" alt="Athletic Labs" />
+              <img src="${qrLogoDataUrl}" alt="Athletic Labs" />
               <span>Athletic Labs</span>
             </div>
             <h1>${escapedClubName}<br />Test Ön Kaydı</h1>
@@ -267,7 +297,16 @@ export default function Dashboard() {
             </div>
           </main>
           <script>
-            window.onload = () => {
+            window.onload = async () => {
+              await Promise.all(
+                Array.from(document.images).map((image) => {
+                  if (image.complete) return Promise.resolve();
+                  return new Promise((resolve) => {
+                    image.onload = resolve;
+                    image.onerror = resolve;
+                  });
+                })
+              );
               window.focus();
               window.print();
             };
@@ -276,6 +315,47 @@ export default function Dashboard() {
       </html>
     `);
     printWindow.document.close();
+  };
+
+  const openDeleteModal = (session: DashboardSession) => {
+    setDeletingSession(session);
+    setDeletePassword("");
+    setDeleteError("");
+  };
+
+  const closeDeleteModal = () => {
+    if (deleteInProgress) return;
+    setDeletingSession(null);
+    setDeletePassword("");
+    setDeleteError("");
+  };
+
+  const handleDeleteSession = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!deletingSession) return;
+
+    if (deletePassword !== TEST_SESSION_DELETE_PASSWORD) {
+      setDeleteError("Silme şifresi hatalı.");
+      return;
+    }
+
+    setDeleteInProgress(true);
+    setDeleteError("");
+    try {
+      await mvpTestSessionApi.delete(deletingSession.id, deletePassword);
+      setSessions((current) =>
+        current.filter((session) => session.id !== deletingSession.id)
+      );
+      setDeletingSession(null);
+      setDeletePassword("");
+      setCopyMessage(`${deletingSession.clubName} oturumu silindi.`);
+      window.setTimeout(() => setCopyMessage(""), 2500);
+    } catch (error) {
+      console.error("Oturum silinemedi:", error);
+      setDeleteError("Oturum silinemedi. Backend bağlantısını ve şifreyi kontrol edin.");
+    } finally {
+      setDeleteInProgress(false);
+    }
   };
 
   const handleEditSubmit = async (event: React.FormEvent) => {
@@ -473,14 +553,21 @@ export default function Dashboard() {
                             <Edit3 className="h-4 w-4" />
                             Düzenle
                           </button>
-                          <button
-                            onClick={() => openQrModal(session)}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e4fc55]/30 px-4 py-3 text-sm font-semibold text-[#e4fc55] transition hover:bg-[#e4fc55]/10 sm:col-span-2 lg:col-span-1 xl:col-span-2"
-                          >
-                            <QrCode className="h-4 w-4" />
-                            Kayıt QR
-                          </button>
-                        </div>
+	                          <button
+	                            onClick={() => openQrModal(session)}
+	                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e4fc55]/30 px-4 py-3 text-sm font-semibold text-[#e4fc55] transition hover:bg-[#e4fc55]/10"
+	                          >
+	                            <QrCode className="h-4 w-4" />
+	                            Kayıt QR
+	                          </button>
+	                          <button
+	                            onClick={() => openDeleteModal(session)}
+	                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/30 px-4 py-3 text-sm font-semibold text-red-200 transition hover:border-red-400/60 hover:bg-red-500/10"
+	                          >
+	                            <Trash2 className="h-4 w-4" />
+	                            Sil
+	                          </button>
+	                        </div>
                       </div>
                     </div>
                   );
@@ -702,17 +789,92 @@ export default function Dashboard() {
               </button>
               <button
                 type="button"
-                disabled={!qrDataUrl}
-                onClick={printRegistrationQr}
+	                disabled={!qrDataUrl || !qrLogoDataUrl}
+	                onClick={printRegistrationQr}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#e4fc55] px-5 py-3 text-sm font-bold text-[#070e0e] transition hover:bg-white disabled:cursor-not-allowed disabled:bg-[#6f6f73]"
               >
                 <Printer className="h-4 w-4" />
-                Yazdır
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </AppShell>
-  );
-}
+	                Yazdır
+	              </button>
+	            </div>
+	          </div>
+	        </div>
+	      )}
+
+	      {deletingSession && (
+	        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+	          <form
+	            onSubmit={handleDeleteSession}
+	            className="w-full max-w-md rounded-3xl border border-red-500/25 bg-[#091312] p-5 shadow-2xl sm:p-7"
+	          >
+	            <div className="mb-5 flex items-start justify-between gap-4">
+	              <div className="flex gap-3">
+	                <div className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-red-500/12 text-red-200">
+	                  <AlertTriangle className="h-5 w-5" />
+	                </div>
+	                <div>
+	                  <h2 className="text-xl font-semibold">Oturumu Sil</h2>
+	                  <p className="mt-1 text-sm leading-6 text-[#b8b8bd]">
+	                    {deletingSession.clubName} oturumu ve bu oturuma bağlı ölçüm
+	                    kayıtları silinecek.
+	                  </p>
+	                </div>
+	              </div>
+	              <button
+	                type="button"
+	                onClick={closeDeleteModal}
+	                disabled={deleteInProgress}
+	                className="rounded-xl border border-white/10 p-2 text-[#b8b8bd] transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+	                aria-label="Kapat"
+	              >
+	                <X className="h-5 w-5" />
+	              </button>
+	            </div>
+
+	            <label className="block">
+	              <span className="text-sm font-semibold text-[#d6d6d8]">
+	                Silme işlemi için gereken şifreyi yazınız
+	              </span>
+	              <input
+	                value={deletePassword}
+	                onChange={(event) => {
+	                  setDeletePassword(event.target.value);
+	                  setDeleteError("");
+	                }}
+	                type="password"
+	                inputMode="numeric"
+	                autoComplete="off"
+	                className="mt-2 w-full rounded-2xl border border-white/10 bg-[#070e0e] px-4 py-4 text-base text-white outline-none transition focus:border-red-300/80"
+	              />
+	            </label>
+
+	            {deleteError && (
+	              <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
+	                {deleteError}
+	              </div>
+	            )}
+
+	            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+	              <button
+	                type="button"
+	                onClick={closeDeleteModal}
+	                disabled={deleteInProgress}
+	                className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-50"
+	              >
+	                Vazgeç
+	              </button>
+	              <button
+	                type="submit"
+	                disabled={deleteInProgress}
+	                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-500 px-5 py-3 text-sm font-bold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:bg-[#6f6f73]"
+	              >
+	                <Trash2 className="h-4 w-4" />
+	                {deleteInProgress ? "Siliniyor..." : "Oturumu Sil"}
+	              </button>
+	            </div>
+	          </form>
+	        </div>
+	      )}
+	    </AppShell>
+	  );
+	}
