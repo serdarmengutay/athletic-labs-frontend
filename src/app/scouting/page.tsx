@@ -107,12 +107,12 @@ function getInitials(fullName: string): string {
 }
 
 function formatNumber(value: number | null, digits = 1): string {
-  if (value === null || Number.isNaN(value)) return "-";
+  if (value === null || Number.isNaN(value)) return "";
   return value.toFixed(digits);
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return "-";
+  if (!value) return "";
   return new Date(value).toLocaleDateString("tr-TR");
 }
 
@@ -330,7 +330,7 @@ export default function ScoutingPage() {
         sortable: true,
         align: "center",
         headerAlign: "center",
-        renderCell: ({ value }) => String(value ?? "-"),
+        renderCell: ({ value }) => String(value ?? ""),
       },
       {
         field: "height",

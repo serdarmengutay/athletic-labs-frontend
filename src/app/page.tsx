@@ -15,6 +15,8 @@ import * as XLSX from "xlsx";
 import AppShell from "@/components/AppShell";
 import { athleteApi, clubApi, mvpTestSessionApi } from "@/lib/api";
 import { DEFAULT_VALD_SESSION_CONFIG } from "@/lib/valdConfig";
+import { getSportTestConfig, MeasurementKey } from "@/lib/sportTestConfig";
+import { buildSessionMeasurementConfig } from "@/lib/sessionMeasurementConfig";
 
 interface ParsedAthlete {
   fullName: string;
@@ -56,6 +58,13 @@ export default function Home() {
     valdEnabled: false,
     testDate: "",
   });
+  const [enabledMeasurementFields, setEnabledMeasurementFields] = useState<
+    MeasurementKey[]
+  >([]);
+  const sportFields = useMemo(
+    () => (formData.sportType ? getSportTestConfig(formData.sportType).fields : []),
+    [formData.sportType]
+  );
 
   useEffect(() => {
     const fetchData = async () => {
@@ -94,6 +103,24 @@ export default function Home() {
   ) => {
     const { name, value } = event.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSportTypeChange = (sportType: string) => {
+    setFormData((prev) => ({ ...prev, sportType }));
+    // Branş değiştiğinde o branşın bütün ölçümleri varsayılan olarak açılır.
+    setEnabledMeasurementFields(
+      sportType
+        ? getSportTestConfig(sportType).fields.map((field) => field.key)
+        : []
+    );
+  };
+
+  const toggleMeasurementField = (key: MeasurementKey) => {
+    setEnabledMeasurementFields((current) =>
+      current.includes(key)
+        ? current.filter((fieldKey) => fieldKey !== key)
+        : [...current, key]
+    );
   };
 
   const extractBirthYear = (birthDate: string): number | undefined => {
@@ -151,6 +178,10 @@ export default function Home() {
 
     setSubmitting(true);
     try {
+      const sessionMeasurementConfig = buildSessionMeasurementConfig(
+        enabledMeasurementFields,
+        formData.valdEnabled
+      );
       const sessionResponse = await mvpTestSessionApi.create({
         clubName: formData.clubName,
         clubResponsibleName: formData.clubResponsible,
@@ -159,7 +190,7 @@ export default function Home() {
         city: formData.city,
         sportType: formData.sportType,
         valdEnabled: formData.valdEnabled,
-        valdConfig: DEFAULT_VALD_SESSION_CONFIG,
+        valdConfig: sessionMeasurementConfig,
         testDate: formData.testDate,
         notes:
           parsedAthletes.length > 0
@@ -205,7 +236,7 @@ export default function Home() {
       );
       localStorage.setItem(
         "testSessionValdConfig",
-        JSON.stringify(DEFAULT_VALD_SESSION_CONFIG)
+        JSON.stringify(sessionMeasurementConfig)
       );
       localStorage.removeItem("testCompleted");
       router.push("/test-data-entry");
@@ -295,7 +326,7 @@ export default function Home() {
                 <select
                   name="sportType"
                   value={formData.sportType}
-                  onChange={handleInputChange}
+                  onChange={(event) => handleSportTypeChange(event.target.value)}
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-[#091312] px-4 py-4 text-white outline-none transition focus:border-[#e4fc55]/80"
                 >
                   <option value="">Spor dalı seçin</option>
@@ -303,6 +334,49 @@ export default function Home() {
                   <option value="Kız Voleybol">Kız Voleybol</option>
                 </select>
               </label>
+
+              {sportFields.length > 0 && (
+                <fieldset className="md:col-span-2">
+                  <legend className="text-sm font-medium text-[#d6d6d8]">
+                    Testte Yapılacak Ölçümler
+                  </legend>
+                  <p className="mt-1 text-xs text-[#8f9996]">
+                    Kapattığınız ölçümler veri girişinde, eksik kontrolünde ve
+                    sporcu karnesinde yer almaz.
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {sportFields.map((field) => {
+                      const isValdManaged =
+                        formData.valdEnabled && field.key === "verticalJump";
+                      const checked =
+                        enabledMeasurementFields.includes(field.key) &&
+                        !isValdManaged;
+                      return (
+                        <label
+                          key={field.key}
+                          className={`flex items-center gap-3 rounded-xl border px-3 py-3 transition ${
+                            checked
+                              ? "border-[#e4fc55]/50 bg-[#e4fc55]/10"
+                              : "border-white/10 bg-[#091312]"
+                          } ${isValdManaged ? "opacity-60" : "cursor-pointer"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={isValdManaged}
+                            onChange={() => toggleMeasurementField(field.key)}
+                            className="h-4 w-4 accent-[#e4fc55]"
+                          />
+                          <span className="text-sm text-white">{field.label}</span>
+                          <span className="ml-auto text-xs text-[#8f9996]">
+                            {isValdManaged ? "VALD" : field.unit}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              )}
 
               <label className="block md:col-span-2">
                 <span className="text-sm font-medium text-[#d6d6d8]">Test Tarihi</span>

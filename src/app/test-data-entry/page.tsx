@@ -18,6 +18,7 @@ import {
   X,
   Download,
   ScanLine,
+  Edit3,
 } from "lucide-react";
 import { mvpTestSessionApi } from "@/lib/api";
 import QRScanner from "@/components/QRScanner";
@@ -26,6 +27,7 @@ import {
   MeasurementKey,
   MeasurementFieldConfig,
 } from "@/lib/sportTestConfig";
+import { getSessionMeasurementFields } from "@/lib/sessionMeasurementConfig";
 import {
   DEFAULT_VALD_SESSION_CONFIG,
   normalizeValdSessionConfig,
@@ -136,6 +138,12 @@ export default function TestDataEntryPage() {
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [absentAthleteKeys, setAbsentAthleteKeys] = useState<string[]>([]);
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [editingAthlete, setEditingAthlete] = useState<ParsedAthlete | null>(null);
+  const [athleteEditForm, setAthleteEditForm] = useState({
+    fullName: "",
+    birthDate: "",
+  });
+  const [isSavingAthleteEdit, setIsSavingAthleteEdit] = useState(false);
   const [quickAddForm, setQuickAddForm] = useState({
     fullName: "",
     birthDate: "",
@@ -149,22 +157,16 @@ export default function TestDataEntryPage() {
     () => getSportTestConfig(testSessionSportType),
     [testSessionSportType]
   );
-  const testFields = sportConfig.fields;
-  const valdDisabledFieldSet = useMemo(
+  const testFields = useMemo(
     () =>
-      new Set<MeasurementKey>([
-        ...testSessionValdConfig.disabledManualFields,
-        ...(testSessionValdEnabled ? (["verticalJump"] as MeasurementKey[]) : []),
-      ]),
-    [testSessionValdConfig.disabledManualFields, testSessionValdEnabled]
+      getSessionMeasurementFields(
+        testSessionSportType,
+        testSessionValdConfig,
+        testSessionValdEnabled
+      ),
+    [testSessionSportType, testSessionValdConfig, testSessionValdEnabled]
   );
-  const manualTestFields = useMemo(
-    () =>
-      testSessionValdEnabled
-        ? testFields.filter((field) => !valdDisabledFieldSet.has(field.key))
-        : testFields,
-    [testFields, testSessionValdEnabled, valdDisabledFieldSet]
-  );
+  const manualTestFields = testFields;
   const sessionGender: "male" | "female" =
     sportConfig.id === "volleyball_girls" ? "female" : "male";
 
@@ -509,6 +511,69 @@ export default function TestDataEntryPage() {
     setCurrentMeasurements((prev) => ({ ...prev, [key]: numValue }));
   };
 
+  const pickEnabledMeasurements = (measurements?: Measurements): Measurements => {
+    const enabledKeys = new Set(testFields.map((field) => field.key));
+    return Object.fromEntries(
+      Object.entries(measurements || {}).filter(([key, value]) =>
+        enabledKeys.has(key as MeasurementKey) && value !== undefined && value !== null
+      )
+    ) as Measurements;
+  };
+
+  const openAthleteEdit = (athlete: ParsedAthlete) => {
+    setEditingAthlete(athlete);
+    setAthleteEditForm({
+      fullName: athlete.fullName,
+      birthDate: athlete.birthDate?.slice(0, 10) || `${athlete.birthYear}-01-01`,
+    });
+  };
+
+  const handleAthleteEdit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingAthlete?.athleteId) {
+      alert("Sporcu backend kaydı bulunamadı.");
+      return;
+    }
+
+    const fullName = athleteEditForm.fullName.trim();
+    const birthYear = extractBirthYear(athleteEditForm.birthDate);
+    if (!fullName || !birthYear) {
+      alert("Ad soyad ve geçerli doğum tarihi gerekli.");
+      return;
+    }
+
+    setIsSavingAthleteEdit(true);
+    try {
+      const response = await mvpTestSessionApi.updateAthlete(
+        editingAthlete.athleteId,
+        {
+          full_name: fullName,
+          birth_date: athleteEditForm.birthDate,
+          birth_year: birthYear,
+        }
+      );
+      const updated = response.data?.data;
+      const nextAthletes = athletes.map((athlete) =>
+        athlete.athleteId === editingAthlete.athleteId
+          ? {
+              ...athlete,
+              fullName: updated?.full_name || fullName,
+              birthDate: String(updated?.birth_date || athleteEditForm.birthDate).slice(0, 10),
+              birthYear: updated?.birth_year || birthYear,
+            }
+          : athlete
+      );
+      persistAthletes(nextAthletes);
+      setSelectedYear(updated?.birth_year || birthYear);
+      setEditingAthlete(null);
+    } catch (error) {
+      console.error("Sporcu bilgileri güncellenemedi:", error);
+      alert("Sporcu bilgileri güncellenemedi. İnternet bağlantısını kontrol edin.");
+    } finally {
+      setIsSavingAthleteEdit(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!selectedAthlete) return;
 
@@ -689,7 +754,7 @@ export default function TestDataEntryPage() {
           batch.map((athlete) =>
             mvpTestSessionApi.saveMeasurements(
               athlete.athleteTestId!,
-              athlete.measurements!
+              pickEnabledMeasurements(athlete.measurements)
             )
           )
         );
@@ -700,7 +765,7 @@ export default function TestDataEntryPage() {
         for (const athlete of failedAthletes) {
           await mvpTestSessionApi.saveMeasurements(
             athlete.athleteTestId!,
-            athlete.measurements!
+            pickEnabledMeasurements(athlete.measurements)
           );
         }
 
@@ -715,6 +780,7 @@ export default function TestDataEntryPage() {
 
       const response = await mvpTestSessionApi.calculateReport(testSessionId);
       const reportSession = response.data;
+      reportSession.enabledMeasurementFields = testFields.map((field) => field.key);
 
       if (!reportSession.athletes?.length) {
         throw new Error("Backend rapor içinde sporcu döndürmedi.");
@@ -726,7 +792,10 @@ export default function TestDataEntryPage() {
       const measurementByAthleteId = new Map(
         athletes
           .filter((athlete) => athlete.athleteId)
-          .map((athlete) => [athlete.athleteId, athlete.measurements])
+          .map((athlete) => [
+            athlete.athleteId,
+            pickEnabledMeasurements(athlete.measurements),
+          ])
       );
       reportSession.athletes = reportSession.athletes.map((report) => {
         const measurements = normalizeSprintMeasurements({
@@ -1355,6 +1424,14 @@ export default function TestDataEntryPage() {
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
+                          onClick={() => openAthleteEdit(athlete)}
+                          className="flex-none rounded-md border border-[#2f403b] p-2 text-slate-400 hover:border-[#e4fc55] hover:text-[#e4fc55]"
+                          aria-label={`${athlete.fullName} bilgilerini düzenle`}
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleAthleteClick(index)}
                           className="flex min-w-0 flex-1 items-center gap-3 text-left"
                         >
@@ -1446,6 +1523,14 @@ export default function TestDataEntryPage() {
                       </div>
                       <button
                         type="button"
+                        onClick={() => openAthleteEdit(athlete)}
+                        className="flex-none rounded-md border border-[#2f403b] p-2 text-slate-400 hover:border-[#e4fc55] hover:text-[#e4fc55]"
+                        aria-label={`${athlete.fullName} bilgilerini düzenle`}
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleRestoreAbsent(athlete)}
                         className="flex-none rounded-md bg-[#e4fc55] px-3 py-2 text-xs font-bold text-[#070e0e] hover:bg-white"
                       >
@@ -1496,8 +1581,20 @@ export default function TestDataEntryPage() {
                     </p>
                   </div>
                 </div>
-                <div className="text-sm text-slate-400 bg-slate-800 px-3 py-1 rounded-full">
-                  {selectedAthleteIndex + 1}/{filteredAthletes.length}
+                <div className="flex items-center gap-2">
+                  {selectedAthlete && (
+                    <button
+                      type="button"
+                      onClick={() => openAthleteEdit(selectedAthlete)}
+                      className="rounded-lg border border-[#2f403b] p-2 text-slate-300 hover:border-[#e4fc55] hover:text-[#e4fc55]"
+                      aria-label="Sporcu bilgilerini düzenle"
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </button>
+                  )}
+                  <div className="text-sm text-slate-400 bg-slate-800 px-3 py-1 rounded-full">
+                    {selectedAthleteIndex + 1}/{filteredAthletes.length}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1539,22 +1636,8 @@ export default function TestDataEntryPage() {
                       onChange={(e) =>
                         handleMeasurementChange(field.key, e.target.value)
                       }
-                      placeholder={
-                        testSessionValdEnabled &&
-                        valdDisabledFieldSet.has(field.key)
-                          ? "VALD'dan alınacak"
-                          : field.placeholder
-                      }
-                      className={`w-full rounded-lg border px-3 py-2.5 text-slate-100 ${
-                        testSessionValdEnabled &&
-                        valdDisabledFieldSet.has(field.key)
-                          ? "cursor-not-allowed border-[#33443f] bg-[#15201d] text-slate-500"
-                          : "border-[#2f403b] bg-slate-950 focus:border-[#d7f33d]/70 focus:ring-2 focus:ring-[#e4fc55]"
-                      }`}
-                      disabled={
-                        testSessionValdEnabled &&
-                        valdDisabledFieldSet.has(field.key)
-                      }
+                      placeholder={field.placeholder}
+                      className="w-full rounded-lg border border-[#2f403b] bg-slate-950 px-3 py-2.5 text-slate-100 focus:border-[#d7f33d]/70 focus:ring-2 focus:ring-[#e4fc55]"
                     />
                   </div>
                 ))}
@@ -1766,6 +1849,88 @@ export default function TestDataEntryPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {editingAthlete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <form
+            onSubmit={handleAthleteEdit}
+            className="w-full max-w-md rounded-2xl border border-[#263632] bg-[#0d1716] p-5 shadow-2xl"
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-100">
+                  Sporcu Bilgilerini Düzenle
+                </h3>
+                <p className="mt-1 text-xs text-slate-400">
+                  Değişiklikler mevcut teste ve yeniden üretilecek karnelere yansır.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingAthlete(null)}
+                className="text-slate-500 hover:text-slate-200"
+                aria-label="Kapat"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-slate-200">
+                  Ad Soyad
+                </span>
+                <input
+                  value={athleteEditForm.fullName}
+                  onChange={(event) =>
+                    setAthleteEditForm((current) => ({
+                      ...current,
+                      fullName: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-[#2f403b] bg-slate-950 px-3 py-2.5 text-slate-100 focus:border-[#d7f33d]/70 focus:ring-2 focus:ring-[#e4fc55]"
+                  required
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-slate-200">
+                  Doğum Tarihi
+                </span>
+                <input
+                  type="date"
+                  value={athleteEditForm.birthDate}
+                  onChange={(event) =>
+                    setAthleteEditForm((current) => ({
+                      ...current,
+                      birthDate: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-[#2f403b] bg-slate-950 px-3 py-2.5 text-slate-100 focus:border-[#d7f33d]/70 focus:ring-2 focus:ring-[#e4fc55]"
+                  required
+                />
+                <span className="mt-1 block text-xs text-slate-500">
+                  Yıl ve ay bilgisi yaş grubu hesaplarında kullanılır.
+                </span>
+              </label>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setEditingAthlete(null)}
+                className="flex-1 rounded-xl border border-[#2f403b] py-3 font-semibold text-slate-200 hover:border-slate-500"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingAthleteEdit}
+                className="flex-1 rounded-xl bg-[#e4fc55] py-3 font-semibold text-[#070e0e] hover:bg-white disabled:opacity-60"
+              >
+                {isSavingAthleteEdit ? "Kaydediliyor..." : "Kaydet"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

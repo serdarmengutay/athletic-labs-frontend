@@ -13,6 +13,7 @@ export interface ValdMetricDefinition {
 export interface ValdSessionConfig {
   schemaVersion: number;
   disabledManualFields: MeasurementKey[];
+  enabledMeasurementFields?: MeasurementKey[];
   expectedMetrics: ValdMetricDefinition[];
 }
 
@@ -51,6 +52,15 @@ export function normalizeValdSessionConfig(
             typeof key === "string" && measurementKeys.has(key as MeasurementKey)
         )
       : [],
+    // Alan listesi yoksa oturum eski sürümdür ve branşın tüm alanları açık sayılır.
+    ...(Array.isArray(config.enabledMeasurementFields)
+      ? {
+          enabledMeasurementFields: config.enabledMeasurementFields.filter(
+            (key): key is MeasurementKey =>
+              typeof key === "string" && measurementKeys.has(key as MeasurementKey)
+          ),
+        }
+      : {}),
     expectedMetrics: Array.isArray(config.expectedMetrics)
       ? config.expectedMetrics.filter(
           (metric): metric is ValdMetricDefinition =>

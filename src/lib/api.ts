@@ -291,6 +291,14 @@ export const mvpTestSessionApi = {
       status: "active" | "absent" | "skipped";
     }
   ) => api.patch(`/athlete-tests/${athleteTestId}/status`, data),
+  updateAthlete: (
+    athleteId: string,
+    data: {
+      full_name: string;
+      birth_date: string;
+      birth_year: number;
+    }
+  ) => api.put(`/athletes/${athleteId}`, data),
   calculateReport: (testSessionId: string) =>
     api.post<SessionReportResponse>(
       `/test-sessions/${testSessionId}/calculate-report`,

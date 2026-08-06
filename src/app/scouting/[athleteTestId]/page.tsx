@@ -83,7 +83,7 @@ function getInitials(fullName: string): string {
 }
 
 function formatNumber(value: number | null, digits = 1): string {
-  if (value === null || Number.isNaN(value)) return "-";
+  if (value === null || Number.isNaN(value)) return "";
   return value.toFixed(digits);
 }
 
@@ -98,7 +98,7 @@ function getMetricDigits(label: string, unit: string): number {
 }
 
 function formatMetricValue(value: number | null, unit: string, label = ""): string {
-  if (value === null || Number.isNaN(value)) return "-";
+  if (value === null || Number.isNaN(value)) return "";
   return `${formatNumber(value, getMetricDigits(label, unit))}${unit ? ` ${unit}` : ""}`;
 }
 
@@ -177,9 +177,11 @@ function DetailMetricCard({
       <Typography sx={{ fontSize: 30, fontWeight: 800, lineHeight: 1.1 }}>
         {formatMetricValue(value, unit, label)}
       </Typography>
-      <Typography sx={{ mt: 0.9, color: "#8c98a8", fontSize: 12.5 }}>
-        Yaş grubu ort.: {formatMetricValue(average, unit, label)}
-      </Typography>
+      {average !== null && (
+        <Typography sx={{ mt: 0.9, color: "#8c98a8", fontSize: 12.5 }}>
+          Yaş grubu ort.: {formatMetricValue(average, unit, label)}
+        </Typography>
+      )}
     </Paper>
   );
 }
@@ -218,10 +220,11 @@ export default function ScoutingDetailPage() {
       const current = detail.comparison.metrics.find((item) => item.key === metric.key);
       return {
         metric: metric.label,
+        athleteValue: current?.athleteValue ?? null,
         athlete: normalizeMetric(current?.athleteValue ?? null, metric),
         ageGroup: normalizeMetric(current?.ageGroupAverage ?? null, metric),
       };
-    });
+    }).filter((metric) => metric.athleteValue !== null);
   }, [detail]);
 
   const comparisonBarData = useMemo(() => {
@@ -229,7 +232,7 @@ export default function ScoutingDetailPage() {
 
     return detail.comparison.metrics
       .filter((metric) =>
-        [
+        metric.athleteValue !== null && [
           "sprint_30m",
           "sprint_30m_second",
           "agility",
@@ -250,7 +253,10 @@ export default function ScoutingDetailPage() {
   const metricCards = useMemo(() => {
     if (!detail) return [];
 
-    return detail.comparison.metrics.filter((metric) => metric.key !== "fatigue_index");
+    // Ölçülmemiş metrikler kart ve yaş ortalamasıyla birlikte tamamen gizlenir.
+    return detail.comparison.metrics.filter(
+      (metric) => metric.key !== "fatigue_index" && metric.athleteValue !== null
+    );
   }, [detail]);
 
   if (loading) {
@@ -493,14 +499,13 @@ export default function ScoutingDetailPage() {
             </Paper>
 
             <Box sx={{ display: "grid", gap: 2 }}>
+              {detail.metrics.fatigueIndex !== null && (
               <Paper sx={{ p: 2.2 }}>
                 <Typography sx={{ fontSize: 24, fontWeight: 800, mb: 1.4 }}>
                   Yorgunluk Endeksi
                 </Typography>
                 <Typography sx={{ fontSize: 42, fontWeight: 800, color: fatigueMeta.color }}>
-                  {detail.metrics.fatigueIndex !== null
-                    ? `%${formatNumber(detail.metrics.fatigueIndex, 1)}`
-                    : "-"}
+                  %{formatNumber(detail.metrics.fatigueIndex, 1)}
                 </Typography>
                 <Typography sx={{ mt: 1.1, color: fatigueMeta.color, fontWeight: 700 }}>
                   {fatigueMeta.title}
@@ -513,6 +518,7 @@ export default function ScoutingDetailPage() {
                   {formatMetricValue(detail.metrics.sprint30mSecond, "sn", "İkinci 30 Metre")}
                 </Typography>
               </Paper>
+              )}
 
               <Paper sx={{ p: 2.2 }}>
                 <Typography sx={{ fontSize: 24, fontWeight: 800, mb: 1.4 }}>

@@ -23,6 +23,11 @@ import QRCode from "qrcode";
 import AppShell from "@/components/AppShell";
 import { mvpTestSessionApi } from "@/lib/api";
 import { DEFAULT_VALD_SESSION_CONFIG } from "@/lib/valdConfig";
+import { getSportTestConfig, MeasurementKey } from "@/lib/sportTestConfig";
+import {
+  buildSessionMeasurementConfig,
+  getSessionMeasurementFields,
+} from "@/lib/sessionMeasurementConfig";
 
 interface DashboardSession {
   id: string;
@@ -94,6 +99,8 @@ export default function Dashboard() {
     testDate: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [editEnabledMeasurementFields, setEditEnabledMeasurementFields] =
+    useState<MeasurementKey[]>([]);
   const [copyMessage, setCopyMessage] = useState("");
   const [qrSession, setQrSession] = useState<DashboardSession | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
@@ -183,6 +190,31 @@ export default function Dashboard() {
       sportType: session.sportType,
       testDate: new Date(session.testDate).toISOString().slice(0, 10),
     });
+    setEditEnabledMeasurementFields(
+      getSessionMeasurementFields(
+        session.sportType,
+        session.valdConfig,
+        session.valdEnabled
+      ).map((field) => field.key)
+    );
+  };
+
+  const handleEditSportTypeChange = (sportType: string) => {
+    setEditForm((current) => ({ ...current, sportType }));
+    // Branş değişikliği yeni branşın bütün alanlarını güvenli varsayılan yapar.
+    setEditEnabledMeasurementFields(
+      sportType
+        ? getSportTestConfig(sportType).fields.map((field) => field.key)
+        : []
+    );
+  };
+
+  const toggleEditMeasurementField = (key: MeasurementKey) => {
+    setEditEnabledMeasurementFields((current) =>
+      current.includes(key)
+        ? current.filter((fieldKey) => fieldKey !== key)
+        : [...current, key]
+    );
   };
 
   const openQrModal = async (session: DashboardSession) => {
@@ -375,12 +407,17 @@ export default function Dashboard() {
 
     setSavingEdit(true);
     try {
+      const valdConfig = buildSessionMeasurementConfig(
+        editEnabledMeasurementFields,
+        editingSession.valdEnabled
+      );
       const response = await mvpTestSessionApi.update(editingSession.id, {
         clubName: editForm.clubName,
         clubResponsibleName: editForm.clubResponsibleName,
         city: editForm.city,
         sportType: editForm.sportType,
         testDate: editForm.testDate,
+        valdConfig,
       });
       const updated = response.data?.data;
       setSessions((current) =>
@@ -394,6 +431,7 @@ export default function Dashboard() {
                 city: updated?.city || editForm.city,
                 sportType: updated?.sportType || editForm.sportType,
                 testDate: updated?.testDate || editForm.testDate,
+                valdConfig: updated?.valdConfig || valdConfig,
               }
             : session
         )
@@ -669,10 +707,7 @@ export default function Dashboard() {
                 <select
                   value={editForm.sportType}
                   onChange={(event) =>
-                    setEditForm((current) => ({
-                      ...current,
-                      sportType: event.target.value,
-                    }))
+                    handleEditSportTypeChange(event.target.value)
                   }
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-[#070e0e] px-4 py-3 text-white outline-none focus:border-[#e4fc55]/80"
                 >
@@ -681,6 +716,49 @@ export default function Dashboard() {
                   <option value="Kız Voleybol">Kız Voleybol</option>
                 </select>
               </label>
+
+              {editForm.sportType && (
+                <fieldset className="md:col-span-2">
+                  <legend className="text-sm font-medium text-[#d6d6d8]">
+                    Testte Yapılacak Ölçümler
+                  </legend>
+                  <p className="mt-1 text-xs text-[#8f9996]">
+                    Kapatılan alanlar mevcut veriyi silmeden giriş, eksik kontrolü,
+                    hesaplama ve karneden çıkarılır.
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {getSportTestConfig(editForm.sportType).fields.map((field) => {
+                      const isValdManaged =
+                        editingSession.valdEnabled && field.key === "verticalJump";
+                      const checked =
+                        editEnabledMeasurementFields.includes(field.key) &&
+                        !isValdManaged;
+                      return (
+                        <label
+                          key={field.key}
+                          className={`flex items-center gap-3 rounded-xl border px-3 py-3 ${
+                            checked
+                              ? "border-[#e4fc55]/50 bg-[#e4fc55]/10"
+                              : "border-white/10 bg-[#070e0e]"
+                          } ${isValdManaged ? "opacity-60" : "cursor-pointer"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={isValdManaged}
+                            onChange={() => toggleEditMeasurementField(field.key)}
+                            className="h-4 w-4 accent-[#e4fc55]"
+                          />
+                          <span className="text-sm text-white">{field.label}</span>
+                          <span className="ml-auto text-xs text-[#8f9996]">
+                            {isValdManaged ? "VALD" : field.unit}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              )}
 
               <label className="block md:col-span-2">
                 <span className="text-sm font-medium text-[#d6d6d8]">

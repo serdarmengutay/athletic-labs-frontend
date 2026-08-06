@@ -12,6 +12,7 @@ import { createElement, type CSSProperties, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import AthleteReport from "@/components/AthleteReport";
 import { normalizeSprintMeasurements } from "@/lib/normalizeSprintMeasurements";
+import type { MeasurementKey } from "@/lib/sportTestConfig";
 import {
   Activity,
   ArrowUp10,
@@ -53,6 +54,7 @@ type ExportableReport =
       testDate?: string;
       generatedAt: string;
       hideVerticalJump?: boolean;
+      enabledMeasurementFields?: MeasurementKey[];
       youjiQrDataUrl?: string;
       logoDataUrl?: string;
     };
@@ -164,6 +166,7 @@ async function renderReportToImage(
             testDate: exportableReport.testDate,
             generatedAt: exportableReport.generatedAt,
             hideVerticalJump: exportableReport.hideVerticalJump,
+            enabledMeasurementFields: exportableReport.enabledMeasurementFields,
             youjiQrDataUrl,
             logoDataUrl,
           });
@@ -340,6 +343,7 @@ function normalizeReports(
     testDate: reports.testDate,
     generatedAt: reports.reportGeneratedAt,
     hideVerticalJump: Boolean(reports.valdEnabled),
+    enabledMeasurementFields: reports.enabledMeasurementFields,
   }));
 }
 
@@ -555,6 +559,7 @@ function MvpAthleteReport({
   testDate,
   generatedAt,
   hideVerticalJump = false,
+  enabledMeasurementFields,
   youjiQrDataUrl,
   logoDataUrl,
 }: {
@@ -562,10 +567,16 @@ function MvpAthleteReport({
   testDate?: string;
   generatedAt: string;
   hideVerticalJump?: boolean;
+  enabledMeasurementFields?: MeasurementKey[];
   youjiQrDataUrl?: string;
   logoDataUrl?: string;
 }) {
   const m = report.metrics;
+  const enabledFieldSet = enabledMeasurementFields
+    ? new Set<MeasurementKey>(enabledMeasurementFields)
+    : null;
+  const isEnabled = (key: MeasurementKey) =>
+    !enabledFieldSet || enabledFieldSet.has(key);
   const measurements = normalizeSprintMeasurements(report.measurements || {});
   const passMetric = m.passCount ?? {
     value: measurements.passCount ?? null,
@@ -573,20 +584,32 @@ function MvpAthleteReport({
     score: null,
     target: null,
   };
-  const height = measurements.height;
-  const weight = measurements.weight;
+  const height = isEnabled("height") ? measurements.height : undefined;
+  const weight = isEnabled("weight") ? measurements.weight : undefined;
   const vki = measurements.bmi ?? calcVki(height, weight);
-  const sprint1 = valueOf(m.sprint1, measurements.sprint30m);
-  const sprint2 = valueOf(m.sprint2, measurements.sprint30mSecond);
-  const agility = valueOf(m.agility, measurements.agility);
-  const flexibility = valueOf(m.flexibility, measurements.flexibility);
-  const verticalJump = valueOf(m.verticalJump, measurements.verticalJump);
-  const passCount = valueOf(passMetric, measurements.passCount);
-  const handgrip = measurements.handgrip ?? null;
-  const fatigue = valueOf(m.fatigueIndex);
+  const sprint1 = isEnabled("sprint30m")
+    ? valueOf(m.sprint1, measurements.sprint30m)
+    : null;
+  const sprint2 = isEnabled("sprint30mSecond")
+    ? valueOf(m.sprint2, measurements.sprint30mSecond)
+    : null;
+  const agility = isEnabled("agility")
+    ? valueOf(m.agility, measurements.agility)
+    : null;
+  const flexibility = isEnabled("flexibility")
+    ? valueOf(m.flexibility, measurements.flexibility)
+    : null;
+  const verticalJump = isEnabled("verticalJump")
+    ? valueOf(m.verticalJump, measurements.verticalJump)
+    : null;
+  const passCount = isEnabled("passCount")
+    ? valueOf(passMetric, measurements.passCount)
+    : null;
+  const handgrip = isEnabled("handgrip") ? measurements.handgrip ?? null : null;
+  const fatigue = sprint1 !== null && sprint2 !== null ? valueOf(m.fatigueIndex) : null;
   const averages = report.ageGroupAverages;
   const averageScores = report.ageGroupPercentiles;
-  const includesPass = passCount !== null || averages?.passCount !== null;
+  const includesPass = passCount !== null;
   const radarData: RadarScoreDatum[] = [
     {
       label: "Esneklik",
@@ -644,7 +667,7 @@ function MvpAthleteReport({
         averages?.agility ?? null
       ),
     },
-    ...(!hideVerticalJump
+    ...(!hideVerticalJump && verticalJump !== null
       ? [{
           label: "Dikey Sıçrama",
           shortLabel: "Sıçrama",
@@ -678,16 +701,16 @@ function MvpAthleteReport({
           },
         ]
       : []),
-  ];
+  ].filter((item) => item.athleteScore !== null);
 
   const barData: ChartDatum[] = [
     {
       label: "VKI",
       shortLabel: "VKI",
       unit: "",
-      athleteValue: m.bmi.value,
+      athleteValue: vki,
       averageValue: averages?.bmi ?? null,
-      athletePlot: normalizeForRadar(m.bmi.value, CHART_METRICS[0]),
+      athletePlot: normalizeForRadar(vki, CHART_METRICS[0]),
       averagePlot: normalizeForRadar(averages?.bmi ?? null, CHART_METRICS[0]),
     },
     {
@@ -726,7 +749,7 @@ function MvpAthleteReport({
       athletePlot: normalizeForRadar(agility, CHART_METRICS[4]),
       averagePlot: normalizeForRadar(averages?.agility ?? null, CHART_METRICS[4]),
     },
-    ...(!hideVerticalJump
+    ...(!hideVerticalJump && verticalJump !== null
       ? [{
           label: "Dikey Sıçrama",
           shortLabel: "Sıçrama",
@@ -756,35 +779,39 @@ function MvpAthleteReport({
           },
         ]
       : []),
-  ];
+  ].filter((item) => item.athleteValue !== null);
 
   const performanceRows = [
-    { label: "30m Koşu", value: formatValue(sprint1, "sn"), icon: Timer },
-    { label: "İkinci 30m", value: formatValue(sprint2, "sn"), icon: Timer },
+    { label: "30m Koşu", rawValue: sprint1, value: formatValue(sprint1, "sn"), icon: Timer },
+    { label: "İkinci 30m", rawValue: sprint2, value: formatValue(sprint2, "sn"), icon: Timer },
     {
       label: "Yorgunluk Endeksi",
+      rawValue: fatigue,
       value: formatValue(fatigue, "%"),
       icon: Activity,
     },
-    { label: "Çeviklik", value: formatValue(agility, "sn"), icon: Zap },
+    { label: "Çeviklik", rawValue: agility, value: formatValue(agility, "sn"), icon: Zap },
     {
       label: "Esneklik",
+      rawValue: flexibility,
       value: formatValue(flexibility, "cm"),
       icon: LineChart,
     },
-    ...(!hideVerticalJump
+    ...(!hideVerticalJump && verticalJump !== null
       ? [{
           label: "Dikey Sıçrama",
+          rawValue: verticalJump,
           value: formatValue(verticalJump, "cm"),
           icon: ArrowUp10,
         }]
       : []),
     ...(includesPass
-      ? [{ label: "Pas", value: formatPass(passCount), icon: Target }]
+      ? [{ label: "Pas", rawValue: passCount, value: formatPass(passCount), icon: Target }]
       : []),
     ...(handgrip !== null
       ? [{
           label: "Handgrip",
+          rawValue: handgrip,
           value: `${formatValue(handgrip, "kg")}${
             measurements.handgripCategory
               ? ` (${measurements.handgripCategory})`
@@ -793,7 +820,7 @@ function MvpAthleteReport({
           icon: HandFist,
         }]
       : []),
-  ];
+  ].filter((row) => row.rawValue !== null);
   const availableRadarScores = radarData
     .map((item) => item.athleteScore)
     .filter((score): score is number => score !== null);
@@ -804,6 +831,17 @@ function MvpAthleteReport({
       ? availableRadarScores.reduce((sum, score) => sum + score, 0) /
         availableRadarScores.length
       : 0;
+  const hasPhysicalData = [
+    height,
+    weight,
+    vki,
+    measurements.ffmi,
+    report.youjiSummary?.bodyFatPercent,
+    report.youjiSummary?.mineralAmount,
+    report.youjiSummary?.proteinAmount,
+  ].some((value) => value !== null && value !== undefined);
+  const hasAnyMeasuredValue =
+    hasPhysicalData || performanceRows.length > 0 || handgrip !== null;
 
   return (
     <div style={styles.page}>
@@ -816,45 +854,33 @@ function MvpAthleteReport({
 
       <main style={styles.main}>
         <section style={styles.leftColumn}>
+          {hasPhysicalData && (
           <Card title="Fiziksel Ölçümler" icon={<Ruler size={18} />}>
-            <DataRow
-              label="Boy"
-              value={formatHeight(height)}
-              icon={<Ruler size={16} />}
-            />
-            <DataRow
-              label="Kilo"
-              value={formatValue(weight, "kg")}
-              icon={<Weight size={16} />}
-            />
-            <DataRow
-              label="VKI"
-              value={vkiLabel(vki)}
-              icon={<Activity size={16} />}
-            />
-            <DataRow
-              label="FFMI"
-              value={formatValue(measurements.ffmi)}
-              icon={<BicepsFlexed size={16} />}
-            />
-            <DataRow
-              label="Yağ Oranı"
-              value={formatValue(report.youjiSummary?.bodyFatPercent, "%")}
-              icon={<HeartPulse size={16} />}
-            />
-            <DataRow
-              label="Mineral"
-              value={formatValue(report.youjiSummary?.mineralAmount, "kg")}
-              icon={<Gem size={16} />}
-            />
-            <DataRow
-              label="Protein"
-              value={formatValue(report.youjiSummary?.proteinAmount, "kg")}
-              icon={<Dna size={16} />}
-              isLast
-            />
+            {height !== undefined && (
+              <DataRow label="Boy" value={formatHeight(height)} icon={<Ruler size={16} />} />
+            )}
+            {weight !== undefined && (
+              <DataRow label="Kilo" value={formatValue(weight, "kg")} icon={<Weight size={16} />} />
+            )}
+            {vki !== null && (
+              <DataRow label="VKI" value={vkiLabel(vki)} icon={<Activity size={16} />} />
+            )}
+            {measurements.ffmi !== undefined && (
+              <DataRow label="FFMI" value={formatValue(measurements.ffmi)} icon={<BicepsFlexed size={16} />} />
+            )}
+            {report.youjiSummary?.bodyFatPercent !== undefined && (
+              <DataRow label="Yağ Oranı" value={formatValue(report.youjiSummary.bodyFatPercent, "%")} icon={<HeartPulse size={16} />} />
+            )}
+            {report.youjiSummary?.mineralAmount !== undefined && (
+              <DataRow label="Mineral" value={formatValue(report.youjiSummary.mineralAmount, "kg")} icon={<Gem size={16} />} />
+            )}
+            {report.youjiSummary?.proteinAmount !== undefined && (
+              <DataRow label="Protein" value={formatValue(report.youjiSummary.proteinAmount, "kg")} icon={<Dna size={16} />} isLast />
+            )}
           </Card>
+          )}
 
+          {performanceRows.length > 0 && (
           <Card title="Performans Testleri" icon={<Bolt size={18} />}>
             {performanceRows.map((row, index) => (
               <DataRow
@@ -866,20 +892,26 @@ function MvpAthleteReport({
               />
             ))}
           </Card>
+          )}
 
+          {hasAnyMeasuredValue && (
           <Card title="Genel Performans" icon={<Trophy size={18} />}>
             <div style={styles.overallBox}>
               %{overallPercentile.toFixed(1)}
             </div>
-            <div style={styles.overallLabel}>En İyi Yüzdelik Dilim</div>
+            <div style={styles.overallLabel}>Yüzdelik Dilim</div>
           </Card>
+          )}
         </section>
 
         <section style={styles.middleColumn}>
+          {radarData.length >= 3 && (
           <Card title="Performans Skorları" icon={<LineChart size={18} />}>
             <RadarSvg data={radarData} />
           </Card>
+          )}
 
+          {performanceRows.length > 0 && (
           <Card title="Bilgilendirme" icon={<BadgeInfo size={18} />}>
             <InfoBlock
               sprint1={sprint1}
@@ -892,14 +924,19 @@ function MvpAthleteReport({
               passCount={passCount}
             />
           </Card>
+          )}
         </section>
 
         <section style={styles.rightColumn}>
+          {barData.length > 0 && (
           <Card title="Yaş Grubu Karşılaştırması" icon={<BarChart3 size={18} />}>
             <BarSvg data={barData} />
           </Card>
+          )}
 
-          <YoujiDeviceCard report={report} qrDataUrl={youjiQrDataUrl} />
+          {report.youjiSummary && (
+            <YoujiDeviceCard report={report} qrDataUrl={youjiQrDataUrl} />
+          )}
         </section>
       </main>
     </div>
@@ -1364,40 +1401,43 @@ function InfoBlock({
 
   return (
     <div style={styles.info}>
-      <div style={styles.infoSummary}>
-        <div>
-          <div style={styles.infoEyebrow}>Yorgunluk Endeksi</div>
-          <div style={{ ...styles.infoStatus, color: assessment.color }}>
-            {assessment.label}
+      {fatigue !== null && (
+        <>
+          <div style={styles.infoSummary}>
+            <div>
+              <div style={styles.infoEyebrow}>Yorgunluk Endeksi</div>
+              <div style={{ ...styles.infoStatus, color: assessment.color }}>
+                {assessment.label}
+              </div>
+            </div>
+            <div style={styles.infoScore}>{formatValue(fatigue, "%")}</div>
           </div>
+          <p style={styles.infoDescription}>{assessment.description}</p>
+        </>
+      )}
+      {(sprint1 !== null || sprint2 !== null) && (
+        <div style={styles.sprintComparison}>
+          {sprint1 !== null && <span>1. koşu: {formatValue(sprint1, "sn")}</span>}
+          {sprint2 !== null && <span>2. koşu: {formatValue(sprint2, "sn")}</span>}
         </div>
-        <div style={styles.infoScore}>{formatValue(fatigue, "%")}</div>
-      </div>
-      <p style={styles.infoDescription}>{assessment.description}</p>
-      <div style={styles.sprintComparison}>
-        <span>1. koşu: {formatValue(sprint1, "sn")}</span>
-        <span>2. koşu: {formatValue(sprint2, "sn")}</span>
-      </div>
+      )}
       <h4 style={styles.infoHeading}>4 Aylık Hedefler</h4>
       <div style={styles.targetGrid}>
-        <TargetItem
-          label="30m Koşu"
-          value={formatValue(targetSprint(sprint1), "sn")}
-        />
-        <TargetItem
-          label="Çeviklik"
-          value={formatValue(targetAgility(agility), "sn")}
-        />
-        {!hideVerticalJump && (
+        {sprint1 !== null && (
+          <TargetItem label="30m Koşu" value={formatValue(targetSprint(sprint1), "sn")} />
+        )}
+        {agility !== null && (
+          <TargetItem label="Çeviklik" value={formatValue(targetAgility(agility), "sn")} />
+        )}
+        {!hideVerticalJump && verticalJump !== null && (
           <TargetItem
             label="Dikey Sıçrama"
             value={formatValue(targetJump(verticalJump), "cm")}
           />
         )}
-        <TargetItem
-          label="Esneklik"
-          value={formatValue(targetFlexibility(flexibility), "cm")}
-        />
+        {flexibility !== null && (
+          <TargetItem label="Esneklik" value={formatValue(targetFlexibility(flexibility), "cm")} />
+        )}
         {passCount !== null && (
           <TargetItem label="Pas" value={formatPass(targetPass(passCount))} />
         )}

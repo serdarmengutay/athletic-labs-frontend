@@ -125,6 +125,7 @@ export interface SessionReportResponse {
   testSessionId: string;
   clubName: string;
   valdEnabled?: boolean;
+  enabledMeasurementFields?: import("@/lib/sportTestConfig").MeasurementKey[];
   testDate?: string;
   reportGeneratedAt: string;
   athletes: FrontendAthleteReport[];
