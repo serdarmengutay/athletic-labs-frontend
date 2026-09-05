@@ -229,6 +229,32 @@ async function renderReportWithRetry(
 const yieldToBrowser = () =>
   new Promise<void>((resolve) => window.setTimeout(resolve, 30));
 
+/**
+ * Tek bir sporcunun karnesini JPG olarak indirir.
+ * Toplu indirmede bozuk çıkan karneleri tüm listeyi yeniden üretmeden almak için kullanılır.
+ */
+export async function exportSingleAthleteReport(
+  reports: SessionReportResponse,
+  athleteId: string
+): Promise<string> {
+  const exportableReport = normalizeReports(reports).find(
+    (item) => item.kind === "session" && item.report.athleteId === athleteId
+  );
+
+  if (!exportableReport) {
+    throw new Error("Bu sporcu için rapor verisi bulunamadı.");
+  }
+
+  const imageBlob = await renderReportWithRetry(exportableReport);
+  const fullName =
+    exportableReport.kind === "legacy"
+      ? exportableReport.report.athlete.fullName
+      : exportableReport.report.fullName;
+  const fileName = `${sanitizeFileName(fullName)}_karne.jpg`;
+  saveAs(imageBlob, fileName);
+  return fileName;
+}
+
 export async function exportReportsToZip(
   reports: AthleteReportResponse[] | SessionReportResponse,
   sessionName: string,

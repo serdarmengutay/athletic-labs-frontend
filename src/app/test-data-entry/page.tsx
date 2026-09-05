@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -19,6 +19,8 @@ import {
   Download,
   ScanLine,
   Edit3,
+  FileDown,
+  Lock,
 } from "lucide-react";
 import { mvpTestSessionApi } from "@/lib/api";
 import QRScanner from "@/components/QRScanner";
@@ -45,6 +47,8 @@ import {
   updateQueuedXOneQrImport,
 } from "@/lib/offlineMeasurements";
 import { normalizeSprintMeasurements } from "@/lib/normalizeSprintMeasurements";
+
+const SINGLE_REPORT_EXPORT_PASSWORD = "080826";
 
 type Measurements = Partial<Record<MeasurementKey, number>>;
 
@@ -148,6 +152,12 @@ export default function TestDataEntryPage() {
     fullName: "",
     birthDate: "",
   });
+  const [singleReportAthlete, setSingleReportAthlete] =
+    useState<ParsedAthlete | null>(null);
+  const [singleReportPassword, setSingleReportPassword] = useState("");
+  const [singleReportError, setSingleReportError] = useState("");
+  const [isExportingSingleReport, setIsExportingSingleReport] = useState(false);
+  const [singleReportSuccess, setSingleReportSuccess] = useState("");
   const [xOneQrUrl, setXOneQrUrl] = useState("");
   const [isImportingXOne, setIsImportingXOne] = useState(false);
   const [showXOneScanner, setShowXOneScanner] = useState(false);
@@ -718,6 +728,110 @@ export default function TestDataEntryPage() {
     } finally {
       setIsDownloadingExcel(false);
     }
+  };
+
+  const exportAthleteReport = async (athlete: ParsedAthlete) => {
+    if (!testSessionId) {
+      setSingleReportError("Test oturumu bulunamadı. Oturumu yeniden açın.");
+      return;
+    }
+    if (!athlete.athleteId || !athlete.athleteTestId) {
+      setSingleReportError(
+        "Bu sporcu merkezi sisteme kaydedilmemiş. Önce ölçümleri kaydedin."
+      );
+      return;
+    }
+    if (!navigator.onLine) {
+      setSingleReportError("Karne oluşturmak için internet bağlantısı gerekli.");
+      return;
+    }
+
+    setIsExportingSingleReport(true);
+    try {
+      const { exportSingleAthleteReport } = await import("@/utils/reportExport");
+      const measurements = pickEnabledMeasurements(
+        athlete.athleteTestId === selectedAthlete?.athleteTestId
+          ? currentMeasurements
+          : athlete.measurements
+      );
+
+      await mvpTestSessionApi.saveMeasurements(
+        athlete.athleteTestId,
+        measurements
+      );
+
+      const response = await mvpTestSessionApi.calculateReport(testSessionId);
+      const reportSession = response.data;
+      reportSession.enabledMeasurementFields = testFields.map(
+        (field) => field.key
+      );
+      if (!reportSession.testDate && testSessionDate) {
+        reportSession.testDate = testSessionDate;
+      }
+
+      const athleteReport = reportSession.athletes?.find(
+        (report) => report.athleteId === athlete.athleteId
+      );
+      if (!athleteReport) {
+        throw new Error("Backend bu sporcu için rapor döndürmedi.");
+      }
+
+      reportSession.athletes = [
+        {
+          ...athleteReport,
+          measurements: normalizeSprintMeasurements({
+            ...athleteReport.measurements,
+            ...measurements,
+          }),
+        },
+      ];
+
+      const fileName = await exportSingleAthleteReport(
+        reportSession,
+        athlete.athleteId
+      );
+
+      setSingleReportAthlete(null);
+      setSingleReportPassword("");
+      setSingleReportSuccess(`${fileName} indirildi.`);
+      window.setTimeout(() => setSingleReportSuccess(""), 5000);
+    } catch (error) {
+      console.error("Tekil karne export hatası:", error);
+      setSingleReportError(
+        error instanceof Error
+          ? `Karne oluşturulamadı: ${error.message}`
+          : "Karne oluşturulamadı. Lütfen tekrar deneyin."
+      );
+    } finally {
+      setIsExportingSingleReport(false);
+    }
+  };
+
+  const openSingleReportModal = (athlete: ParsedAthlete) => {
+    setSingleReportAthlete(athlete);
+    setSingleReportPassword("");
+    setSingleReportError("");
+    setSingleReportSuccess("");
+  };
+
+  const closeSingleReportModal = () => {
+    if (isExportingSingleReport) return;
+    setSingleReportAthlete(null);
+    setSingleReportPassword("");
+    setSingleReportError("");
+  };
+
+  const handleSingleReportSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (isExportingSingleReport || !singleReportAthlete) return;
+
+    if (singleReportPassword !== SINGLE_REPORT_EXPORT_PASSWORD) {
+      setSingleReportError("Şifre hatalı.");
+      return;
+    }
+
+    setSingleReportError("");
+    await exportAthleteReport(singleReportAthlete);
   };
 
   const completeTest = async () => {
@@ -1726,6 +1840,32 @@ export default function TestDataEntryPage() {
               <span>Kaydet</span>
             </button>
 
+            {/* Tek sporcu karne çıktısı */}
+            <button
+              type="button"
+              onClick={() =>
+                selectedAthlete && openSingleReportModal(selectedAthlete)
+              }
+              disabled={!selectedAthlete || isExportingSingleReport}
+              className="w-full rounded-xl border border-[#e4fc55]/40 bg-[#0d1716] py-3 font-semibold text-[#e4fc55] flex items-center justify-center space-x-2 transition-all hover:border-[#e4fc55] hover:bg-[#e4fc55]/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FileDown className="h-5 w-5" />
+              <span>
+                {isExportingSingleReport
+                  ? "Karne Hazırlanıyor..."
+                  : "Rapor Çıkar"}
+              </span>
+            </button>
+
+            {singleReportSuccess && (
+              <div className="flex items-center space-x-2 rounded-lg border border-[#e4fc55]/30 bg-[#e4fc55]/10 p-3">
+                <Check className="h-5 w-5 text-green-500" />
+                <span className="text-sm font-medium text-white">
+                  {singleReportSuccess}
+                </span>
+              </div>
+            )}
+
             {/* Success Message */}
             {showSaveSuccess && (
               <div className="bg-[#e4fc55]/10 border border-[#e4fc55]/30 rounded-lg p-3 flex items-center space-x-2">
@@ -1993,6 +2133,85 @@ export default function TestDataEntryPage() {
             >
               Listeye Ekle
             </button>
+          </form>
+        </div>
+      )}
+
+      {singleReportAthlete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <form
+            onSubmit={handleSingleReportSubmit}
+            className="w-full max-w-md rounded-3xl border border-[#e4fc55]/25 bg-[#091312] p-5 shadow-2xl sm:p-7"
+          >
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div className="flex gap-3">
+                <div className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-[#e4fc55]/12 text-[#e4fc55]">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-white">
+                    Rapor Çıkar
+                  </h2>
+                  <p className="mt-1 text-sm leading-6 text-[#b8b8bd]">
+                    {singleReportAthlete.fullName} için tek karne oluşturulup
+                    indirilecek.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeSingleReportModal}
+                disabled={isExportingSingleReport}
+                className="rounded-xl border border-white/10 p-2 text-[#b8b8bd] transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Kapat"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <label className="block">
+              <span className="text-sm font-semibold text-[#d6d6d8]">
+                Rapor çıkarmak için gereken şifreyi yazınız
+              </span>
+              <input
+                value={singleReportPassword}
+                onChange={(event) => {
+                  setSingleReportPassword(event.target.value);
+                  setSingleReportError("");
+                }}
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                autoFocus
+                disabled={isExportingSingleReport}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-[#070e0e] px-4 py-4 text-base text-white outline-none transition focus:border-[#e4fc55]/80"
+              />
+            </label>
+
+            {singleReportError && (
+              <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
+                {singleReportError}
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeSingleReportModal}
+                disabled={isExportingSingleReport}
+                className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                disabled={isExportingSingleReport}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#e4fc55] px-5 py-3 text-sm font-bold text-[#070e0e] transition hover:bg-white disabled:cursor-not-allowed disabled:bg-[#6f6f73]"
+              >
+                <FileDown className="h-4 w-4" />
+                {isExportingSingleReport ? "Hazırlanıyor..." : "Karneyi İndir"}
+              </button>
+            </div>
           </form>
         </div>
       )}
