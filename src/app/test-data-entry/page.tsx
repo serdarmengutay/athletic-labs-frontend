@@ -250,7 +250,9 @@ export default function TestDataEntryPage() {
           await removeQueuedMeasurementSave(queuedSave.id);
         } catch (error) {
           console.error("Bekleyen ölçüm senkronlanamadı:", error);
-          break;
+          // Bağlantı gerçekten yoksa dur; tek bir kayıt hata verdiyse
+          // kuyruğun kalanını bloke etmeden devam et.
+          if (!navigator.onLine) break;
         }
       }
 
@@ -279,7 +281,9 @@ export default function TestDataEntryPage() {
           };
           await updateQueuedXOneQrImport(nextQueuedImport);
           console.error("Bekleyen Youjiu QR senkronlanamadı:", error);
-          break;
+          // Kalıcı olarak hata veren bir QR (ör. 409) sıradaki sporcuların
+          // QR aktarımını süresiz engellememeli.
+          if (!navigator.onLine) break;
         }
       }
       for (const refreshedSessionId of refreshedSessionIds) {
@@ -305,8 +309,11 @@ export default function TestDataEntryPage() {
     return isNaN(year) ? 0 : year;
   };
 
+  // Sporcu listesi ucu QR alanlarını döndürmüyor; bu yüzden alan gelmediğinde
+  // bilinen QR durumunu koruyoruz (aksi halde her liste yenilemesinde siliniyor).
   const mapBackendAthlete = (
-    athlete: SessionAthleteResponseItem
+    athlete: SessionAthleteResponseItem,
+    previous?: ParsedAthlete
   ): ParsedAthlete => ({
     fullName: athlete.fullName,
     birthDate:
@@ -317,17 +324,32 @@ export default function TestDataEntryPage() {
     measurements: athlete.measurement || {},
     source: "backend",
     status: athlete.status || "active",
-    xOneQrImported: athlete.xOneQrImported || Boolean(athlete.xOneReportId),
-    xOneReportId: athlete.xOneReportId || undefined,
-    xOneImportedAt: athlete.xOneImportedAt || undefined,
+    xOneQrImported:
+      athlete.xOneQrImported ??
+      (Boolean(athlete.xOneReportId) || previous?.xOneQrImported || false),
+    xOneReportId: athlete.xOneReportId || previous?.xOneReportId || undefined,
+    xOneImportedAt:
+      athlete.xOneImportedAt || previous?.xOneImportedAt || undefined,
   });
+
+  const applyBackendAthletes = (backendAthletes: SessionAthleteResponseItem[]) => {
+    setAthletes((currentAthletes) => {
+      const previousByTestId = new Map(
+        currentAthletes
+          .filter((athlete) => athlete.athleteTestId)
+          .map((athlete) => [athlete.athleteTestId as string, athlete])
+      );
+      const nextAthletes = backendAthletes.map((athlete) =>
+        mapBackendAthlete(athlete, previousByTestId.get(athlete.athleteTestId))
+      );
+      localStorage.setItem("parsedAthletes", JSON.stringify(nextAthletes));
+      return nextAthletes;
+    });
+  };
 
   const refreshAthletesFromBackend = async (sessionId: string) => {
     const response = await mvpTestSessionApi.getAthletes(sessionId);
-    const mappedAthletes = response.data.data.athletes.map(
-      (athlete: SessionAthleteResponseItem) => mapBackendAthlete(athlete)
-    );
-    persistAthletes(mappedAthletes);
+    applyBackendAthletes(response.data.data.athletes);
   };
 
   const persistAthletes = (nextAthletes: ParsedAthlete[]) => {
@@ -358,10 +380,7 @@ export default function TestDataEntryPage() {
       const backendAthletes = response.data?.data?.athletes;
       if (!Array.isArray(backendAthletes)) return;
 
-      const mappedAthletes = backendAthletes.map((athlete) =>
-        mapBackendAthlete(athlete as SessionAthleteResponseItem)
-      );
-      persistAthletes(mappedAthletes);
+      applyBackendAthletes(backendAthletes as SessionAthleteResponseItem[]);
     } catch (error) {
       console.error("Backend sporcu listesi yüklenemedi:", error);
     }
@@ -463,9 +482,22 @@ export default function TestDataEntryPage() {
               ...athlete,
               measurements: backendMeasurements,
               status: fresh.status || athlete.status,
-              xOneQrImported: Boolean(fresh.xOneQrImported),
-              xOneReportId: fresh.xOneReportId || undefined,
-              xOneImportedAt: fresh.xOneImportedAt || undefined,
+              // Bu uç QR alanlarını döndürüyor; alan hiç gelmezse mevcut
+              // durumu koru, gelen değer false ise backend'e güven.
+              xOneQrImported:
+                fresh.xOneQrImported === undefined
+                  ? athlete.xOneQrImported
+                  : Boolean(fresh.xOneQrImported),
+              xOneReportId:
+                fresh.xOneReportId ??
+                (fresh.xOneQrImported === undefined
+                  ? athlete.xOneReportId
+                  : undefined),
+              xOneImportedAt:
+                fresh.xOneImportedAt ??
+                (fresh.xOneQrImported === undefined
+                  ? athlete.xOneImportedAt
+                  : undefined),
             }
           : athlete
       );
