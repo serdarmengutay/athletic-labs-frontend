@@ -38,6 +38,15 @@ import {
 
 const REPORT_WIDTH = 1400;
 const REPORT_HEIGHT = 1127;
+const REPORT_HEADER_HEIGHT = 105;
+const REPORT_COLUMN_GAP = 18;
+// Kolonlar main alanının padding'i düşüldükten sonra kalan yüksekliği paylaşır.
+const REPORT_COLUMN_HEIGHT = 954;
+// Kart iç boşluğu (18+18) + başlık satırı (19) + başlık alt boşluğu (16).
+const CARD_CHROME_HEIGHT = 71;
+const OVERALL_CARD_BASE_HEIGHT = 168;
+const OVERALL_CARD_MAX_HEIGHT = 236;
+const DATA_ROW_MAX_HEIGHT = 46;
 const REPORT_PIXEL_RATIO = 2;
 const REPORT_JPEG_QUALITY = 0.95;
 const REPORT_RENDER_RETRY_PIXEL_RATIO = 1.5;
@@ -831,17 +840,53 @@ function MvpAthleteReport({
       ? availableRadarScores.reduce((sum, score) => sum + score, 0) /
         availableRadarScores.length
       : 0;
-  const hasPhysicalData = [
-    height,
-    weight,
-    vki,
-    measurements.ffmi,
-    report.youjiSummary?.bodyFatPercent,
-    report.youjiSummary?.mineralAmount,
-    report.youjiSummary?.proteinAmount,
-  ].some((value) => value !== null && value !== undefined);
+  const physicalRows = [
+    ...(height !== undefined
+      ? [{ label: "Boy", value: formatHeight(height), icon: Ruler }]
+      : []),
+    ...(weight !== undefined
+      ? [{ label: "Kilo", value: formatValue(weight, "kg"), icon: Weight }]
+      : []),
+    ...(vki !== null
+      ? [{ label: "VKI", value: vkiLabel(vki), icon: Activity }]
+      : []),
+    ...(measurements.ffmi !== undefined
+      ? [{
+          label: "FFMI",
+          value: formatValue(measurements.ffmi),
+          icon: BicepsFlexed,
+        }]
+      : []),
+    ...(report.youjiSummary?.bodyFatPercent !== undefined
+      ? [{
+          label: "Yağ Oranı",
+          value: formatValue(report.youjiSummary.bodyFatPercent, "%"),
+          icon: HeartPulse,
+        }]
+      : []),
+    ...(report.youjiSummary?.mineralAmount !== undefined
+      ? [{
+          label: "Mineral",
+          value: formatValue(report.youjiSummary.mineralAmount, "kg"),
+          icon: Gem,
+        }]
+      : []),
+    ...(report.youjiSummary?.proteinAmount !== undefined
+      ? [{
+          label: "Protein",
+          value: formatValue(report.youjiSummary.proteinAmount, "kg"),
+          icon: Dna,
+        }]
+      : []),
+  ];
+  const hasPhysicalData = physicalRows.length > 0;
   const hasAnyMeasuredValue =
     hasPhysicalData || performanceRows.length > 0 || handgrip !== null;
+  const leftColumnLayout = computeLeftColumnLayout(
+    physicalRows.length,
+    performanceRows.length,
+    hasAnyMeasuredValue
+  );
 
   return (
     <div style={styles.page}>
@@ -855,33 +900,31 @@ function MvpAthleteReport({
       <main style={styles.main}>
         <section style={styles.leftColumn}>
           {hasPhysicalData && (
-          <Card title="Fiziksel Ölçümler" icon={<Ruler size={18} />}>
-            {height !== undefined && (
-              <DataRow label="Boy" value={formatHeight(height)} icon={<Ruler size={16} />} />
-            )}
-            {weight !== undefined && (
-              <DataRow label="Kilo" value={formatValue(weight, "kg")} icon={<Weight size={16} />} />
-            )}
-            {vki !== null && (
-              <DataRow label="VKI" value={vkiLabel(vki)} icon={<Activity size={16} />} />
-            )}
-            {measurements.ffmi !== undefined && (
-              <DataRow label="FFMI" value={formatValue(measurements.ffmi)} icon={<BicepsFlexed size={16} />} />
-            )}
-            {report.youjiSummary?.bodyFatPercent !== undefined && (
-              <DataRow label="Yağ Oranı" value={formatValue(report.youjiSummary.bodyFatPercent, "%")} icon={<HeartPulse size={16} />} />
-            )}
-            {report.youjiSummary?.mineralAmount !== undefined && (
-              <DataRow label="Mineral" value={formatValue(report.youjiSummary.mineralAmount, "kg")} icon={<Gem size={16} />} />
-            )}
-            {report.youjiSummary?.proteinAmount !== undefined && (
-              <DataRow label="Protein" value={formatValue(report.youjiSummary.proteinAmount, "kg")} icon={<Dna size={16} />} isLast />
-            )}
+          <Card
+            title="Fiziksel Ölçümler"
+            icon={<Ruler size={18} />}
+            height={leftColumnLayout.physicalCardHeight}
+            fill
+          >
+            {physicalRows.map((row, index) => (
+              <DataRow
+                key={row.label}
+                label={row.label}
+                value={row.value}
+                icon={<row.icon size={16} />}
+                isLast={index === physicalRows.length - 1}
+              />
+            ))}
           </Card>
           )}
 
           {performanceRows.length > 0 && (
-          <Card title="Performans Testleri" icon={<Bolt size={18} />}>
+          <Card
+            title="Performans Testleri"
+            icon={<Bolt size={18} />}
+            height={leftColumnLayout.performanceCardHeight}
+            fill
+          >
             {performanceRows.map((row, index) => (
               <DataRow
                 key={row.label}
@@ -895,7 +938,13 @@ function MvpAthleteReport({
           )}
 
           {hasAnyMeasuredValue && (
-          <Card title="Genel Performans" icon={<Trophy size={18} />}>
+          <Card
+            title="Genel Performans"
+            icon={<Trophy size={18} />}
+            height={leftColumnLayout.overallCardHeight}
+            fill
+            bodyStyle={styles.overallBody}
+          >
             <div style={styles.overallBox}>
               %{overallPercentile.toFixed(1)}
             </div>
@@ -1024,22 +1073,96 @@ function Header({
   );
 }
 
+/**
+ * Sol kolondaki kartların yüksekliklerini satır sayısına göre dağıtır.
+ * Böylece Handgrip gibi opsiyonel satırlar eklendiğinde kart taşmaz,
+ * satır sayısı az olduğunda da kartın altında boşluk kalmaz.
+ */
+function computeLeftColumnLayout(
+  physicalRowCount: number,
+  performanceRowCount: number,
+  includeOverall: boolean
+): {
+  physicalCardHeight: number;
+  performanceCardHeight: number;
+  overallCardHeight: number;
+} {
+  const dataCardCount =
+    (physicalRowCount > 0 ? 1 : 0) + (performanceRowCount > 0 ? 1 : 0);
+  const cardCount = dataCardCount + (includeOverall ? 1 : 0);
+  const gapTotal = REPORT_COLUMN_GAP * Math.max(0, cardCount - 1);
+  const totalRows = physicalRowCount + performanceRowCount;
+
+  if (totalRows === 0) {
+    return {
+      physicalCardHeight: 0,
+      performanceCardHeight: 0,
+      overallCardHeight: includeOverall ? OVERALL_CARD_MAX_HEIGHT : 0,
+    };
+  }
+
+  let overallCardHeight = includeOverall ? OVERALL_CARD_BASE_HEIGHT : 0;
+  let rowSpace =
+    REPORT_COLUMN_HEIGHT -
+    gapTotal -
+    overallCardHeight -
+    CARD_CHROME_HEIGHT * dataCardCount;
+
+  // Satırlar rahat sığıyorsa artan yeri genel performans kartına aktar.
+  const surplus = rowSpace - DATA_ROW_MAX_HEIGHT * totalRows;
+  if (includeOverall && surplus > 0) {
+    const extra = Math.min(
+      surplus,
+      OVERALL_CARD_MAX_HEIGHT - OVERALL_CARD_BASE_HEIGHT
+    );
+    overallCardHeight += extra;
+    rowSpace -= extra;
+  }
+
+  const physicalRowSpace =
+    physicalRowCount > 0
+      ? Math.round((rowSpace * physicalRowCount) / totalRows)
+      : 0;
+  const performanceRowSpace =
+    performanceRowCount > 0 ? rowSpace - physicalRowSpace : 0;
+
+  return {
+    physicalCardHeight:
+      physicalRowCount > 0 ? CARD_CHROME_HEIGHT + physicalRowSpace : 0,
+    performanceCardHeight:
+      performanceRowCount > 0 ? CARD_CHROME_HEIGHT + performanceRowSpace : 0,
+    overallCardHeight,
+  };
+}
+
 function Card({
   title,
   icon,
   children,
+  height,
+  fill,
+  bodyStyle,
 }: {
   title: string;
   icon: ReactNode;
   children: ReactNode;
+  height?: number;
+  fill?: boolean;
+  bodyStyle?: CSSProperties;
 }) {
   return (
-    <div style={styles.card}>
+    <div style={height ? { ...styles.card, height } : styles.card}>
       <div style={styles.cardTitle}>
         <span style={styles.cardIcon}>{icon}</span>
         {title}
       </div>
-      {children}
+      {fill ? (
+        <div style={bodyStyle ? { ...styles.cardBody, ...bodyStyle } : styles.cardBody}>
+          {children}
+        </div>
+      ) : (
+        children
+      )}
     </div>
   );
 }
@@ -1532,7 +1655,7 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: 16,
   },
   header: {
-    height: 105,
+    height: REPORT_HEADER_HEIGHT,
     background: "#d7f33d",
     color: "#101910",
     display: "flex",
@@ -1605,7 +1728,7 @@ const styles: Record<string, CSSProperties> = {
     gap: 7,
   },
   main: {
-    height: REPORT_HEIGHT - 105,
+    height: REPORT_HEIGHT - REPORT_HEADER_HEIGHT,
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: 24,
@@ -1613,9 +1736,10 @@ const styles: Record<string, CSSProperties> = {
     boxSizing: "border-box",
   },
   leftColumn: {
-    display: "grid",
-    gridTemplateRows: "365px 365px 188px",
-    gap: 18,
+    display: "flex",
+    flexDirection: "column",
+    height: REPORT_COLUMN_HEIGHT,
+    gap: REPORT_COLUMN_GAP,
   },
   middleColumn: {
     display: "grid",
@@ -1634,11 +1758,21 @@ const styles: Record<string, CSSProperties> = {
     padding: "18px 20px",
     boxSizing: "border-box",
     overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
+  },
+  cardBody: {
+    flex: "1 1 auto",
+    display: "flex",
+    flexDirection: "column",
+    minHeight: 0,
   },
   cardTitle: {
+    flex: "0 0 auto",
     display: "flex",
     alignItems: "center",
     gap: 10,
+    height: 19,
     color: "#d7f33d",
     fontSize: 16,
     fontWeight: 950,
@@ -1651,7 +1785,8 @@ const styles: Record<string, CSSProperties> = {
     color: "#d7f33d",
   },
   dataRow: {
-    minHeight: 40,
+    flex: "1 1 0%",
+    minHeight: 34,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1677,13 +1812,16 @@ const styles: Record<string, CSSProperties> = {
   dataRowLast: {
     borderBottom: "none",
   },
+  overallBody: {
+    justifyContent: "center",
+    gap: 6,
+  },
   overallBox: {
     color: "#d7f33d",
     fontSize: 64,
-    lineHeight: "72px",
+    lineHeight: "68px",
     fontWeight: 950,
     textAlign: "center",
-    paddingTop: 2,
   },
   overallLabel: {
     color: "#eef6ef",
