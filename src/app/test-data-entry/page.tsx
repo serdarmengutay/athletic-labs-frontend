@@ -63,6 +63,7 @@ interface ParsedAthlete {
   status?: "active" | "absent" | "skipped";
   xOneQrImported?: boolean;
   xOneReportId?: string;
+  xOneQrUrl?: string;
   xOneImportedAt?: string;
 }
 
@@ -76,6 +77,7 @@ interface SessionAthleteResponseItem {
   status?: "active" | "absent" | "skipped";
   xOneQrImported?: boolean;
   xOneReportId?: string | null;
+  xOneQrUrl?: string | null;
   xOneImportedAt?: string | null;
 }
 
@@ -152,6 +154,12 @@ export default function TestDataEntryPage() {
     fullName: "",
     birthDate: "",
   });
+  const [xOneConflict, setXOneConflict] = useState<{
+    qrUrl: string;
+    athleteFullName: string | null;
+    sameTestSession: boolean;
+    targetAthleteName: string;
+  } | null>(null);
   const [singleReportAthlete, setSingleReportAthlete] =
     useState<ParsedAthlete | null>(null);
   const [singleReportPassword, setSingleReportPassword] = useState("");
@@ -328,6 +336,7 @@ export default function TestDataEntryPage() {
       athlete.xOneQrImported ??
       (Boolean(athlete.xOneReportId) || previous?.xOneQrImported || false),
     xOneReportId: athlete.xOneReportId || previous?.xOneReportId || undefined,
+    xOneQrUrl: athlete.xOneQrUrl || previous?.xOneQrUrl || undefined,
     xOneImportedAt:
       athlete.xOneImportedAt || previous?.xOneImportedAt || undefined,
   });
@@ -492,6 +501,11 @@ export default function TestDataEntryPage() {
                 fresh.xOneReportId ??
                 (fresh.xOneQrImported === undefined
                   ? athlete.xOneReportId
+                  : undefined),
+              xOneQrUrl:
+                fresh.xOneQrUrl ??
+                (fresh.xOneQrImported === undefined
+                  ? athlete.xOneQrUrl
                   : undefined),
               xOneImportedAt:
                 fresh.xOneImportedAt ??
@@ -1215,7 +1229,10 @@ export default function TestDataEntryPage() {
     setTimeout(() => setShowSaveSuccess(false), 2500);
   };
 
-  const handleImportXOneQr = async (qrUrl = xOneQrUrl) => {
+  const handleImportXOneQr = async (
+    qrUrl = xOneQrUrl,
+    options?: { reassign?: boolean }
+  ) => {
     if (!testSessionId || !selectedAthlete?.athleteId || !qrUrl.trim()) {
       return;
     }
@@ -1234,6 +1251,7 @@ export default function TestDataEntryPage() {
       const response = await mvpTestSessionApi.importXOneQr(testSessionId, {
         athleteId: selectedAthlete.athleteId,
         qrUrl: cleanQrUrl,
+        ...(options?.reassign ? { reassign: true } : {}),
       });
       logYoujiuDeviceData(response.data);
       const importData = response.data?.data || {};
@@ -1280,6 +1298,7 @@ export default function TestDataEntryPage() {
                 importData.officialMeasurementId ||
                 importData.requestedMeasurementId ||
                 importData.reportId,
+              xOneQrUrl: cleanQrUrl,
               xOneImportedAt: new Date().toISOString(),
             }
           : athlete
@@ -1287,9 +1306,24 @@ export default function TestDataEntryPage() {
       persistAthletes(updatedAthletes);
       setXOneQrUrl("");
       setShowXOneScanner(false);
+      setShowXOneUrlFallback(false);
+      setXOneConflict(null);
       setSaveStatus("synced");
       setShowSaveSuccess(true);
       setTimeout(() => setShowSaveSuccess(false), 2000);
+
+      const reassignedFrom = importData.reassignedFrom;
+      if (reassignedFrom) {
+        alert(
+          `Youji raporu ${
+            reassignedFrom.fullName || "diğer sporcu"
+          } kaydından alınıp ${
+            selectedAthlete.fullName
+          } kaydına taşındı.\n\n${
+            reassignedFrom.fullName || "Diğer sporcu"
+          } artık cihaz verisi olmadan görünecek; o sporcunun doğru QR'ını okutmayı unutmayın.`
+        );
+      }
     } catch (error) {
       console.error("X-One QR import hatası:", error);
       if (isNetworkImportError(error)) {
@@ -1301,10 +1335,39 @@ export default function TestDataEntryPage() {
       }
       const apiError =
         typeof error === "object" && error !== null && "response" in error
-          ? (error as { response?: { data?: { code?: string; message?: string; error?: string } } })
-              .response?.data
+          ? (
+              error as {
+                response?: {
+                  data?: {
+                    code?: string;
+                    message?: string;
+                    error?: string;
+                    data?: {
+                      athleteFullName?: string | null;
+                      sameTestSession?: boolean;
+                      canReassign?: boolean;
+                    };
+                  };
+                };
+              }
+            ).response?.data
           : undefined;
       console.error("X-One QR API yanıtı:", apiError);
+
+      if (
+        apiError?.code === "DUPLICATE_REPORT_ID" &&
+        apiError?.data?.canReassign &&
+        !options?.reassign
+      ) {
+        setXOneConflict({
+          qrUrl: cleanQrUrl,
+          athleteFullName: apiError.data.athleteFullName ?? null,
+          sameTestSession: Boolean(apiError.data.sameTestSession),
+          targetAthleteName: selectedAthlete.fullName,
+        });
+        return;
+      }
+
       alert(
         [apiError?.code, apiError?.error || apiError?.message]
           .filter(Boolean)
@@ -1812,9 +1875,26 @@ export default function TestDataEntryPage() {
                       </span>
                     )}
                   </div>
+                  {selectedAthlete.xOneQrUrl && (
+                    <p className="mt-1 break-all text-[11px] text-slate-400">
+                      {selectedAthlete.xOneQrUrl}
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-slate-400">
-                    Yanlış QR okutulduysa tekrar okutabilirsiniz.
+                    Yanlış QR okutulduysa tekrar okutabilir veya bağlantıyı
+                    düzenleyebilirsiniz.
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setXOneQrUrl(selectedAthlete.xOneQrUrl || "");
+                      setShowXOneUrlFallback(true);
+                    }}
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#e4fc55]/40 px-3 py-1.5 text-xs font-semibold text-[#e4fc55] hover:border-[#e4fc55] hover:bg-[#e4fc55]/10"
+                  >
+                    <Edit3 className="h-3.5 w-3.5" />
+                    Bağlantıyı Düzenle
+                  </button>
                 </div>
               )}
               <div className="rounded-xl border border-dashed border-[#3a4d47] bg-slate-900/60 p-5 text-center">
@@ -1857,7 +1937,9 @@ export default function TestDataEntryPage() {
                     }
                     className="rounded-lg bg-[#e4fc55] px-4 py-2 text-sm font-semibold text-[#070e0e] hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    URL ile Al
+                    {selectedAthlete?.xOneQrImported
+                      ? "Bağlantıyı Güncelle"
+                      : "URL ile Al"}
                   </button>
                 </div>
               )}
@@ -2166,6 +2248,64 @@ export default function TestDataEntryPage() {
               Listeye Ekle
             </button>
           </form>
+        </div>
+      )}
+
+      {xOneConflict && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-3xl border border-amber-400/30 bg-[#091312] p-5 shadow-2xl sm:p-7">
+            <div className="mb-5 flex gap-3">
+              <div className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-amber-400/12 text-amber-300">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-white">
+                  Bu QR başka bir sporcuda
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-[#b8b8bd]">
+                  Bu Youji raporu şu an{" "}
+                  <span className="font-semibold text-white">
+                    {xOneConflict.athleteFullName || "başka bir sporcu"}
+                  </span>{" "}
+                  kaydına bağlı
+                  {xOneConflict.sameTestSession ? "" : " (başka bir oturumda)"}.
+                  Rapor{" "}
+                  <span className="font-semibold text-white">
+                    {xOneConflict.targetAthleteName}
+                  </span>{" "}
+                  kaydına taşınsın mı?
+                </p>
+                <p className="mt-3 text-xs leading-5 text-[#8f9a95]">
+                  Taşıdıktan sonra diğer sporcu cihaz verisiz kalır; onun doğru
+                  QR&apos;ını da okutmanız gerekir.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setXOneConflict(null)}
+                disabled={isImportingXOne}
+                className="rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const conflict = xOneConflict;
+                  setXOneConflict(null);
+                  handleImportXOneQr(conflict.qrUrl, { reassign: true });
+                }}
+                disabled={isImportingXOne}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#e4fc55] px-5 py-3 text-sm font-bold text-[#070e0e] transition hover:bg-white disabled:cursor-not-allowed disabled:bg-[#6f6f73]"
+              >
+                <ScanLine className="h-4 w-4" />
+                {isImportingXOne ? "Taşınıyor..." : "Bu Sporcuya Taşı"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

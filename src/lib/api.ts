@@ -310,6 +310,8 @@ export const mvpTestSessionApi = {
     data: {
       athleteId: string;
       qrUrl: string;
+      // Yanlış sporcuya bağlanmış bir Youji raporunu bu sporcuya taşır.
+      reassign?: boolean;
     }
   ) => api.post(`/test-sessions/${testSessionId}/x-one/import-qr`, data),
 };
