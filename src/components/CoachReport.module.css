@@ -1,0 +1,272 @@
+/* Marka fontları yüklendiğinde devreye girer; uygulamanın genel stilleri etkilenmez. */
+.page {
+  box-sizing: border-box;
+  padding: 28px 34px 20px;
+  background: #fff;
+  color: #1a1d1a;
+  font-family: "Degular Variable", "Degular", Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  line-height: 1.2;
+}
+.page * {
+  box-sizing: border-box;
+}
+.brandRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 64px;
+  flex-shrink: 0;
+}
+.logoCrop {
+  width: 430px;
+  height: 78px;
+  overflow: hidden;
+  position: relative;
+}
+.logoCrop img {
+  position: absolute;
+  width: 590px;
+  max-width: none;
+  height: auto;
+  left: -85px;
+  top: -123px;
+}
+.motto {
+  border-left: 2px solid #fd003e;
+  padding-left: 20px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #747b7f;
+  line-height: 1.45;
+}
+.headingRow {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  margin: 18px 0 14px;
+}
+.heading {
+  width: 560px;
+  flex-shrink: 0;
+}
+.heading h1 {
+  margin: 0;
+  font-family: "Pilat", "Pilat Bold", Arial, sans-serif;
+  font-size: 40px;
+  letter-spacing: -1.5px;
+  font-weight: 800;
+}
+.heading p {
+  margin: 4px 0 10px;
+  font-size: 20px;
+  color: #747b7f;
+  overflow-wrap: anywhere;
+}
+.accent {
+  width: 48px;
+  height: 4px;
+  background: #fd003e;
+}
+.metadata {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1.2fr 0.7fr;
+  gap: 18px;
+}
+.metadata > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-left: 1px solid #f7c4cf;
+  padding-left: 14px;
+  min-width: 0;
+}
+.metadata svg {
+  color: #fd003e;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+.metadata span {
+  font-size: 14px;
+  color: #646b70;
+}
+.metadata strong {
+  display: block;
+  color: #1a1d1a;
+  margin-top: 5px;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+.performance,
+.physical {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #dedfe0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.performance th {
+  background: #1a1d1a;
+  color: #fff;
+  height: 70px;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 7px 5px;
+  border-right: 1px solid #484b48;
+  text-align: center;
+}
+.performance th svg {
+  display: block;
+  margin: 0 auto 5px;
+}
+.performance td {
+  height: 68px;
+  border-top: 1px solid #e5e6e8;
+  border-right: 1px solid #e5e6e8;
+  text-align: center;
+  font-size: 15px;
+  padding: 3px 5px;
+}
+.performance tbody tr:nth-child(even),
+.physical tbody tr:nth-child(even) {
+  background: #f7f7f7;
+}
+.page .name {
+  text-align: left;
+  padding-left: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.metric {
+  border-radius: 9px;
+  background: #f0f1f2;
+  min-height: 58px;
+  padding: 7px 5px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+}
+.metric strong {
+  font-size: 14px;
+}
+.metric small {
+  color: #73777b;
+  font-size: 10px;
+}
+.track {
+  width: 80%;
+  height: 6px;
+  background: #d0d3d5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.track i {
+  display: block;
+  height: 100%;
+  background: #fd003e;
+  border-radius: inherit;
+}
+.qr {
+  display: block;
+  height: 62px;
+  width: 62px;
+  margin: auto;
+}
+.missing {
+  color: #7c8084;
+  font-size: 13px;
+}
+.overall {
+  background: #ffe5ec;
+  color: #a50029;
+  padding: 10px 3px;
+  border-radius: 14px;
+}
+.overall strong {
+  display: block;
+  font-size: 21px;
+}
+.overall small {
+  font-size: 11px;
+}
+.physicalSection {
+  margin-top: 14px;
+}
+.physicalSection h2 {
+  font-size: 17px;
+  margin: 0 0 7px;
+  font-weight: 700;
+}
+.physical th {
+  height: 28px;
+  background: #ececec;
+  font-size: 12px;
+  text-align: center;
+}
+.physical td {
+  height: 26px;
+  font-size: 12px;
+  text-align: center;
+  border-top: 1px solid #e5e6e8;
+  padding: 3px 5px;
+}
+.notes {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr 1fr;
+  gap: 13px;
+  margin-top: auto;
+  padding-top: 14px;
+}
+.notes > div {
+  border: 1px solid #e5e6e8;
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+.notes > div:first-child {
+  display: block;
+}
+.noteTitle {
+  font-size: 14px;
+  font-weight: 700;
+}
+.notes p {
+  font-size: 12px;
+  color: #62676c;
+  line-height: 1.35;
+  margin: 4px 0 0;
+}
+.notes svg {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+}
+.notes .info {
+  background: #fff0f4;
+}
+.info svg {
+  color: #fd003e;
+}
+.page footer {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #e5e6e8;
+  margin-top: 13px;
+  padding-top: 10px;
+  font-size: 12px;
+  color: #646b70;
+}
+.page footer b {
+  color: #1a1d1a;
+}

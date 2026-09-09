@@ -589,23 +589,12 @@ function chartAxisLabel(item: ChartDatum): string {
   return `${item.shortLabel} (${item.unit})`;
 }
 
-function MvpAthleteReport({
-  report,
-  testDate,
-  generatedAt,
+// Karne ve antrenör raporu aynı ölçümleri, skorları ve alan görünürlüğünü kullanır.
+export function getAthleteReportData(
+  report: FrontendAthleteReport,
   hideVerticalJump = false,
-  enabledMeasurementFields,
-  youjiQrDataUrl,
-  logoDataUrl,
-}: {
-  report: FrontendAthleteReport;
-  testDate?: string;
-  generatedAt: string;
-  hideVerticalJump?: boolean;
-  enabledMeasurementFields?: MeasurementKey[];
-  youjiQrDataUrl?: string;
-  logoDataUrl?: string;
-}) {
+  enabledMeasurementFields?: MeasurementKey[]
+) {
   const m = report.metrics;
   const enabledFieldSet = enabledMeasurementFields
     ? new Set<MeasurementKey>(enabledMeasurementFields)
@@ -908,6 +897,57 @@ function MvpAthleteReport({
   const hasPhysicalData = physicalRows.length > 0;
   const hasAnyMeasuredValue =
     hasPhysicalData || performanceRows.length > 0 || handgrip !== null;
+  return {
+    radarData,
+    barData,
+    overallPercentile,
+    physicalRows,
+    performanceRows,
+    hasPhysicalData,
+    hasAnyMeasuredValue,
+    sprint1,
+    sprint2,
+    agility,
+    fatigue,
+    flexibility,
+    verticalJump,
+    passCount,
+  };
+}
+
+function MvpAthleteReport({
+  report,
+  testDate,
+  generatedAt,
+  hideVerticalJump = false,
+  enabledMeasurementFields,
+  youjiQrDataUrl,
+  logoDataUrl,
+}: {
+  report: FrontendAthleteReport;
+  testDate?: string;
+  generatedAt: string;
+  hideVerticalJump?: boolean;
+  enabledMeasurementFields?: MeasurementKey[];
+  youjiQrDataUrl?: string;
+  logoDataUrl?: string;
+}) {
+  const {
+    radarData,
+    barData,
+    overallPercentile,
+    physicalRows,
+    performanceRows,
+    hasPhysicalData,
+    hasAnyMeasuredValue,
+    sprint1,
+    sprint2,
+    agility,
+    fatigue,
+    flexibility,
+    verticalJump,
+    passCount,
+  } = getAthleteReportData(report, hideVerticalJump, enabledMeasurementFields);
   const leftColumnLayout = computeLeftColumnLayout(
     physicalRows.length,
     performanceRows.length,

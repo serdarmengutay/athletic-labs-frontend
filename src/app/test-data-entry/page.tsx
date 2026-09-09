@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { mvpTestSessionApi } from "@/lib/api";
 import QRScanner from "@/components/QRScanner";
+import dynamic from "next/dynamic";
+
 import {
   getSportTestConfig,
   MeasurementKey,
@@ -47,6 +49,11 @@ import {
   updateQueuedXOneQrImport,
 } from "@/lib/offlineMeasurements";
 import { normalizeSprintMeasurements } from "@/lib/normalizeSprintMeasurements";
+
+// Antrenör seçimi yalnızca açıldığında yüklenir.
+const CoachReportModal = dynamic(() => import("@/components/CoachReportModal"), {
+  ssr: false,
+});
 
 const SINGLE_REPORT_EXPORT_PASSWORD = "080826";
 
@@ -135,6 +142,7 @@ export default function TestDataEntryPage() {
   const [testSessionValdConfig, setTestSessionValdConfig] =
     useState<ValdSessionConfig>(DEFAULT_VALD_SESSION_CONFIG);
   const [isExporting, setIsExporting] = useState(false);
+  const [showCoachReportModal, setShowCoachReportModal] = useState(false);
   const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
   const [exportProgress, setExportProgress] = useState({
     current: 0,
@@ -880,6 +888,30 @@ export default function TestDataEntryPage() {
     await exportAthleteReport(singleReportAthlete);
   };
 
+  // Güncel rapor sunucudan alınır; diğer tabletlerin ölçümleri yerel kopyayla ezilmez.
+  const prepareCoachReports = async (athleteIds: string[]) => {
+    if (!testSessionId) throw new Error("Test oturumu bulunamadı. Oturumu yeniden açın.");
+    if (!navigator.onLine) throw new Error("Rapor oluşturmak için internet bağlantısı gerekli.");
+    const [queuedMeasurements, queuedImports] = await Promise.all([
+      getQueuedMeasurementCount(),
+      getQueuedXOneQrImportCount(),
+    ]);
+    if (queuedMeasurements > 0 || queuedImports > 0) {
+      throw new Error("Bekleyen ölçümler ve cihaz verileri senkronlandıktan sonra tekrar deneyin.");
+    }
+    const response = await mvpTestSessionApi.calculateReport(testSessionId);
+    const reportSession = response.data;
+    if (!reportSession.athletes?.length) throw new Error("Bu oturum için karne verisi bulunamadı.");
+    const selected = new Set(athleteIds);
+    return {
+      ...reportSession,
+      athletes: reportSession.athletes.filter((athlete) => selected.has(athlete.athleteId)),
+      enabledMeasurementFields: testFields.map((field) => field.key),
+      valdEnabled: reportSession.valdEnabled ?? testSessionValdEnabled,
+      testDate: reportSession.testDate || testSessionDate,
+    };
+  };
+
   const completeTest = async () => {
     setIsExporting(true);
     setExportProgress({ current: 0, total: activeAthletes.length });
@@ -1513,6 +1545,17 @@ export default function TestDataEntryPage() {
                 Tüm tabletlerden senkronlanan en güncel saha verilerini ve VALD
                 eşleştirme sütunlarını indirir.
               </p>
+
+              {/* Mevcut toplu karne akışından bağımsız grup raporu. */}
+              <button
+                type="button"
+                onClick={() => setShowCoachReportModal(true)}
+                disabled={isExporting || !testSessionId || activeAthletes.length === 0}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#d7f33d]/50 bg-[#d7f33d]/10 py-3 font-semibold text-[#e4fc55] transition-colors hover:bg-[#d7f33d]/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <FileDown className="h-5 w-5" />
+                Antrenör Raporu Çıkar
+              </button>
 
               {/* Complete Test Button */}
               <button
@@ -2307,6 +2350,15 @@ export default function TestDataEntryPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showCoachReportModal && (
+        <CoachReportModal
+          athletes={activeAthletes.filter((athlete) => athlete.status !== "absent" && athlete.status !== "skipped")}
+          sessionName={testSessionName}
+          prepareReports={prepareCoachReports}
+          onClose={() => setShowCoachReportModal(false)}
+        />
       )}
 
       {singleReportAthlete && (
