@@ -857,17 +857,33 @@ export function getAthleteReportData(
       : 0;
   const physicalRows = [
     ...(height !== undefined
-      ? [{ label: "Boy", value: formatHeight(height), icon: Ruler }]
+      ? [{
+          label: "Boy",
+          rawValue: height,
+          value: formatHeight(height),
+          icon: Ruler,
+        }]
       : []),
     ...(weight !== undefined
-      ? [{ label: "Kilo", value: formatValue(weight, "kg"), icon: Weight }]
+      ? [{
+          label: "Kilo",
+          rawValue: weight,
+          value: formatValue(weight, "kg"),
+          icon: Weight,
+        }]
       : []),
     ...(vki !== null
-      ? [{ label: "VKI", value: vkiLabel(vki), icon: Activity }]
+      ? [{
+          label: "VKI",
+          rawValue: vki,
+          value: vkiLabel(vki),
+          icon: Activity,
+        }]
       : []),
     ...(measurements.ffmi !== undefined
       ? [{
           label: "FFMI",
+          rawValue: measurements.ffmi,
           value: formatValue(measurements.ffmi),
           icon: BicepsFlexed,
         }]
@@ -875,6 +891,7 @@ export function getAthleteReportData(
     ...(report.youjiSummary?.bodyFatPercent !== undefined
       ? [{
           label: "Yağ Oranı",
+          rawValue: report.youjiSummary.bodyFatPercent,
           value: formatValue(report.youjiSummary.bodyFatPercent, "%"),
           icon: HeartPulse,
         }]
@@ -882,6 +899,7 @@ export function getAthleteReportData(
     ...(report.youjiSummary?.mineralAmount !== undefined
       ? [{
           label: "Mineral",
+          rawValue: report.youjiSummary.mineralAmount,
           value: formatValue(report.youjiSummary.mineralAmount, "kg"),
           icon: Gem,
         }]
@@ -889,6 +907,7 @@ export function getAthleteReportData(
     ...(report.youjiSummary?.proteinAmount !== undefined
       ? [{
           label: "Protein",
+          rawValue: report.youjiSummary.proteinAmount,
           value: formatValue(report.youjiSummary.proteinAmount, "kg"),
           icon: Dna,
         }]

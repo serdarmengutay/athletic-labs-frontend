@@ -8,7 +8,7 @@ import type { SessionReportResponse } from "@/types/report";
 import CoachReport, {
   buildCoachReportRows,
   COACH_REPORT_HEIGHT,
-  COACH_REPORT_PAGE_SIZE,
+  buildCoachReportPages,
   COACH_REPORT_WIDTH,
 } from "@/components/CoachReport";
 
@@ -39,7 +39,8 @@ export async function createCoachReportPdf(
 ): Promise<Blob> {
   const selectedSession = selectCoachReports(session, athleteIds);
   const rows = buildCoachReportRows(selectedSession);
-  const pageCount = Math.ceil(rows.length / COACH_REPORT_PAGE_SIZE);
+  const pages = buildCoachReportPages(rows);
+  const pageCount = pages.length;
   const pdf = new jsPDF({
     orientation: "landscape",
     unit: "px",
@@ -67,16 +68,14 @@ export async function createCoachReportPdf(
   try {
     for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
       onProgress?.(pageIndex, pageCount);
-      const pageRows = rows.slice(
-        pageIndex * COACH_REPORT_PAGE_SIZE,
-        (pageIndex + 1) * COACH_REPORT_PAGE_SIZE,
-      );
+      const currentPage = pages[pageIndex];
+      const pageRows = currentPage.rows;
       const qrImages: Record<string, string> = {};
-      for (const row of pageRows) {
+      for (const row of currentPage.kind === "health" ? pageRows : []) {
         const url = row.athlete.youjiSummary?.deviceReportUrl;
         if (url)
           qrImages[row.athlete.athleteId] = await QRCode.toDataURL(url, {
-            width: 248,
+            width: 760,
             margin: 4,
             errorCorrectionLevel: "M",
           });
@@ -91,6 +90,8 @@ export async function createCoachReportPdf(
             pageNumber={pageIndex + 1}
             pageCount={pageCount}
             qrImages={qrImages}
+            pageKind={currentPage.kind}
+            startIndex={currentPage.startIndex}
           />,
         ),
       );

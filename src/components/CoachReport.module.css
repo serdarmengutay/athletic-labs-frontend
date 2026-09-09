@@ -47,7 +47,7 @@
   display: flex;
   align-items: center;
   gap: 30px;
-  margin: 18px 0 14px;
+  margin: 12px 0 10px;
 }
 .heading {
   width: 560px;
@@ -124,15 +124,15 @@
 }
 .performance th svg {
   display: block;
-  margin: 0 auto 5px;
+  margin: 0 auto 3px;
 }
 .performance td {
-  height: 68px;
+  height: 56px;
   border-top: 1px solid #e5e6e8;
   border-right: 1px solid #e5e6e8;
   text-align: center;
   font-size: 15px;
-  padding: 3px 5px;
+  padding: 2px 5px;
 }
 .performance tbody tr:nth-child(even),
 .physical tbody tr:nth-child(even) {
@@ -147,13 +147,13 @@
 .metric {
   border-radius: 9px;
   background: #f0f1f2;
-  min-height: 58px;
-  padding: 7px 5px;
+  min-height: 46px;
+  padding: 6px 5px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 .metric strong {
   font-size: 14px;
@@ -161,10 +161,11 @@
 .metric small {
   color: #73777b;
   font-size: 10px;
+  line-height: 1;
 }
 .track {
   width: 80%;
-  height: 6px;
+  height: 5px;
   background: #d0d3d5;
   border-radius: 8px;
   overflow: hidden;
@@ -199,7 +200,7 @@
   font-size: 11px;
 }
 .physicalSection {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 .physicalSection h2 {
   font-size: 17px;
@@ -213,11 +214,11 @@
   text-align: center;
 }
 .physical td {
-  height: 26px;
+  height: 20px;
   font-size: 12px;
   text-align: center;
   border-top: 1px solid #e5e6e8;
-  padding: 3px 5px;
+  padding: 2px 5px;
 }
 .notes {
   display: grid;
@@ -229,7 +230,7 @@
 .notes > div {
   border: 1px solid #e5e6e8;
   border-radius: 10px;
-  padding: 12px 16px;
+  padding: 8px 15px;
   display: flex;
   align-items: center;
   gap: 15px;
@@ -269,4 +270,137 @@
 }
 .page footer b {
   color: #1a1d1a;
+}
+
+/* Yorgunluk değeri tek sayı olduğundan diğer performans kutularından daha kompakttır. */
+.fatigueMetric {
+  min-height: 34px;
+  padding: 5px 3px;
+}
+.fatigueMetric strong {
+  font-size: 13px;
+}
+
+/* QR, önceki 62 px görünümün üç katından büyük gösterilir. */
+.healthSection h2,
+.averageGroup h2 {
+  margin: 2px 0 6px;
+  font-size: 23px;
+  font-weight: 700;
+}
+.healthSection > p {
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: #62676c;
+}
+.healthTables {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+}
+.healthTable {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #dedfe0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.healthTable th {
+  background: #1a1d1a;
+  color: #fff;
+  padding: 12px 8px;
+  font-size: 15px;
+}
+.healthTable td {
+  height: 192px;
+  padding: 8px;
+  text-align: center;
+  font-size: 18px;
+  border-top: 1px solid #e5e6e8;
+  border-right: 1px solid #e5e6e8;
+}
+.healthTable tbody tr:nth-child(even) {
+  background: #f7f7f7;
+}
+.healthTable .qr {
+  width: 174px;
+  height: 174px;
+}
+.averageOverview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin: 14px 0 28px;
+}
+.averageOverview > div {
+  border: 1px solid #f7c4cf;
+  background: #fff0f4;
+  border-radius: 14px;
+  padding: 22px 26px;
+}
+.averageOverview span {
+  font-size: 14px;
+  font-weight: 700;
+  color: #646b70;
+  letter-spacing: 1px;
+}
+.averageOverview strong {
+  display: block;
+  font-size: 42px;
+  margin-top: 8px;
+  color: #a50029;
+}
+.averageOverview p {
+  font-size: 15px;
+  margin: 6px 0 0;
+  color: #62676c;
+}
+.averageGroup {
+  margin-bottom: 28px;
+}
+.averageGroup h2 {
+  margin-bottom: 14px;
+}
+.averageGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.averageCard {
+  padding: 18px 22px;
+  border: 1px solid #dedfe0;
+  border-radius: 12px;
+  background: #f7f7f7;
+  border-top: 3px solid #fd003e;
+}
+.averageCard span {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+}
+.averageCard strong {
+  display: block;
+  font-size: 29px;
+  margin: 10px 0;
+}
+.averageCard small {
+  color: #62676c;
+  font-size: 14px;
+}
+
+/* Ölçüm tablolarının altlığı, sayfa dilimi ne olursa olsun tüm seçimin ortalamasıdır. */
+.averageRow td {
+  height: 34px;
+  background: #ffe5ec;
+  color: #a50029;
+  font-weight: 700;
+  font-size: 15px;
+  border-top: 2px solid #fd003e;
+  border-right: 1px solid #f7c4cf;
+}
+.physical .averageRow td {
+  height: 26px;
+  font-size: 12px;
 }

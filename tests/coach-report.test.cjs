@@ -153,3 +153,104 @@ test("sayfalar farklı eksik alanları olsa da aynı seçim sütunlarını payla
   );
   assert.equal(rows[0].performanceRows.length, 0);
 });
+
+const {
+  calculateCoachReportAverages,
+  formatCoachAverage,
+} = require("../src/utils/coachReportSummary.ts");
+const { buildCoachReportPages } = require("../src/components/CoachReport.tsx");
+
+test("takım ortalaması seçilen sporcuların ham değerlerini kullanır; eksikler sıfır sayılmaz", () => {
+  const first = athlete("first");
+  const second = athlete("second");
+  second.measurements.passCount = 12;
+  second.measurements.flexibility = 6;
+  second.measurements.height = 180;
+  second.measurements.weight = 80;
+  first.overallPerformance = 0;
+  second.overallPerformance = 100;
+  const missing = athlete("missing");
+  missing.measurements = {};
+  missing.metrics = Object.fromEntries(
+    Object.keys(missing.metrics).map((key) => [key, metric(null, null)]),
+  );
+  missing.youjiSummary = undefined;
+  const selected = selectCoachReports(
+    { ...session, athletes: [first, second, missing, athlete("unselected")] },
+    ["first", "second", "missing"],
+  );
+  const averages = calculateCoachReportAverages(buildCoachReportRows(selected));
+  assert.equal(
+    averages.performance.find((item) => item.label === "Pas").value,
+    6,
+  );
+  assert.equal(
+    averages.performance.find((item) => item.label === "Pas").count,
+    2,
+  );
+  assert.equal(
+    averages.performance.find((item) => item.label === "Esneklik").value,
+    2,
+  );
+  assert.equal(averages.overall.value, 50);
+  assert.equal(averages.overall.count, 2);
+  assert.equal(
+    averages.physical.find((item) => item.label === "Boy").value,
+    172.5,
+  );
+  assert.equal(
+    averages.physical.find((item) => item.label === "VKI").value,
+    (56 / 1.65 ** 2 + 80 / 1.8 ** 2) / 2,
+  );
+});
+
+test("geçersiz değerler ortalama hesabına girmez ve kesirli pas ortalaması korunur", () => {
+  const rows = buildCoachReportRows(session);
+  rows.forEach((row, i) => {
+    row.performanceRows = [{ label: "Pas", rawValue: [1, 2, NaN][i] }];
+    row.physicalRows = [{ label: "Boy", rawValue: Infinity }];
+    row.overallPercentile = NaN;
+  });
+  const averages = calculateCoachReportAverages(rows);
+  assert.equal(formatCoachAverage(averages.performance[0]), "1.5 adet / 30 sn");
+  assert.equal(averages.performance[0].count, 2);
+  assert.equal(averages.physical[0].value, null);
+  assert.equal(formatCoachAverage(averages.overall), "-");
+});
+
+test("rapor büyük QR sayfalarından sonra tüm grubun takım ortalamasıyla biter", () => {
+  const rows = buildCoachReportRows({
+    ...session,
+    athletes: Array.from({ length: 60 }, (_, i) => athlete(String(i))),
+  });
+  const pages = buildCoachReportPages(rows);
+  assert.equal(pages.length, 17);
+  assert.equal(pages.at(-1).kind, "averages");
+  for (const kind of ["measurements", "health"]) {
+    const section = pages.filter((page) => page.kind === kind);
+    assert.deepEqual(
+      section.flatMap((page) => page.rows.map((row) => row.athlete.athleteId)),
+      rows.map((row) => row.athlete.athleteId),
+    );
+    assert.equal(section.at(-1).startIndex, 56);
+    assert.equal(section.at(-1).rows.length, 4);
+  }
+});
+
+test("ölçüm tablolarının her sütunu için ortalama satırında bir karşılık vardır", () => {
+  const rows = buildCoachReportRows(session);
+  const averages = calculateCoachReportAverages(rows);
+  for (const [kind, items] of [
+    ["performanceRows", averages.performance],
+    ["physicalRows", averages.physical],
+  ]) {
+    const labels = getCoachReportColumns(rows, kind).map(
+      (column) => column.label,
+    );
+    assert.ok(labels.length > 0);
+    assert.deepEqual(
+      labels.filter((label) => !items.some((item) => item.label === label)),
+      [],
+    );
+  }
+});
