@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
 const PUBLIC_ROUTES = ["/login"];
-const PUBLIC_ROUTE_PREFIXES = ["/kayit/", "/demo/"];
+const PUBLIC_ROUTE_PREFIXES = ["/kayit/"];
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
