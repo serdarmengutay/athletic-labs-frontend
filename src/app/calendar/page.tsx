@@ -9,13 +9,11 @@ import {
   CalendarRange,
   ChevronLeft,
   ChevronRight,
-  Download,
   FileSpreadsheet,
   ListTodo,
   MapPin,
   NotebookPen,
   Plus,
-  Upload,
   Users,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -121,8 +119,15 @@ export default function CalendarPage() {
   const [sessions, setSessions] = useState<CalendarSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const { notes, addNote, updateNote, deleteNote, importNotes } =
-    useCalendarNotes();
+  const {
+    notes,
+    loading: notesLoading,
+    loadError: notesLoadError,
+    refresh: refreshNotes,
+    addNote,
+    updateNote,
+    deleteNote,
+  } = useCalendarNotes();
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const today = new Date();
@@ -136,7 +141,6 @@ export default function CalendarPage() {
     null
   );
   const panelRef = useRef<HTMLDivElement>(null);
-  const backupInputRef = useRef<HTMLInputElement>(null);
 
   const loadSessions = async () => {
     try {
@@ -333,36 +337,6 @@ export default function CalendarPage() {
 
   const addDraft = (draft: NoteDraft, dateKey: string, sessionId?: string) =>
     addNote({ ...draft, dateKey, sessionId });
-
-  const exportBackup = () => {
-    const blob = new Blob(
-      [JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), notes }, null, 2)],
-      { type: "application/json" }
-    );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `athletic-labs-takvim-notlari-${todayKey}.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  };
-
-  const importBackup = async (file?: File) => {
-    if (!file) return;
-    try {
-      const count = importNotes(JSON.parse(await file.text()));
-      alert(
-        count > 0
-          ? `${count} not yedekten eklendi veya güncellendi.`
-          : "Yedekte bu cihazda olmayan veya daha güncel bir not bulunamadı."
-      );
-    } catch (error) {
-      console.error("Not yedeği okunamadı:", error);
-      alert("Yedek dosyası okunamadı. Takvimden alınan .json yedeğini seçin.");
-    }
-  };
 
   const selectedSessions = sessionsByDate[selectedDateKey] || [];
   const selectedDayNotes = dayNotesByDate[selectedDateKey] || [];
@@ -597,6 +571,25 @@ export default function CalendarPage() {
             </div>
 
             <div className="space-y-5 p-5">
+              {(notesLoadError || loadError) && (
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+                  <span>
+                    {notesLoadError
+                      ? "Notlar yüklenemedi; ekibin son notları görünmüyor olabilir."
+                      : "Oturumlar yüklenemedi; oturum notları gizli kalabilir."}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      refreshNotes();
+                      if (loadError) loadSessions();
+                    }}
+                    className="flex-none font-semibold text-white underline"
+                  >
+                    Tekrar dene
+                  </button>
+                </div>
+              )}
               {selectedSessions.length > 0 && (
                 <div className="space-y-4">
                   {selectedSessions.map((session) => {
@@ -680,7 +673,7 @@ export default function CalendarPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8f9996]">
                   Gün Programı
                 </p>
-                {selectedDayNotes.length === 0 && selectedSessions.length === 0 && (
+                {!notesLoading && selectedDayNotes.length === 0 && selectedSessions.length === 0 && (
                   <p className="rounded-2xl border border-dashed border-white/10 px-4 py-5 text-center text-sm text-[#8f9996]">
                     Bu güne planlanmış oturum veya not yok.
                   </p>
@@ -689,7 +682,6 @@ export default function CalendarPage() {
                   <NoteItem
                     key={note.id}
                     note={note}
-                    hint={note.sessionId ? "Silinmiş oturumun notu" : undefined}
                     onUpdate={updateNote}
                     onDelete={deleteNote}
                   />
@@ -795,42 +787,6 @@ export default function CalendarPage() {
             )}
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
-            <h2 className="text-sm font-semibold">Not Yedeği</h2>
-            <p className="mt-1 text-xs leading-5 text-[#8f9996]">
-              Takvim notları ana veritabanına yazılmaz, bu cihazın tarayıcısında
-              saklanır. Başka cihaza taşımak için yedek alıp orada yükleyin.
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={exportBackup}
-                disabled={notes.length === 0}
-                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 px-3 py-2.5 text-xs font-semibold text-[#d6d6d8] transition hover:border-[#e4fc55]/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Yedek Al
-              </button>
-              <button
-                type="button"
-                onClick={() => backupInputRef.current?.click()}
-                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 px-3 py-2.5 text-xs font-semibold text-[#d6d6d8] transition hover:border-[#e4fc55]/60 hover:text-white"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Yedek Yükle
-              </button>
-              <input
-                ref={backupInputRef}
-                type="file"
-                accept="application/json,.json"
-                className="hidden"
-                onChange={(event) => {
-                  importBackup(event.target.files?.[0]);
-                  event.target.value = "";
-                }}
-              />
-            </div>
-          </section>
         </aside>
       </div>
 

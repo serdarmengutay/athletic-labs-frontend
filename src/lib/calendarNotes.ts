@@ -1,12 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  calendarNoteApi,
+  CalendarNotePayload,
+  CalendarNoteResponse,
+} from "./api";
 
-// Takvim notları ana veritabanına yazılmaz; ekibin planlama defteri olarak
-// bu cihazın tarayıcısında tutulur. Yedek dosyasıyla başka cihaza taşınabilir.
-const STORAGE_KEY = "athleticLabsCalendarNotes:v1";
+// Takvim notları ekipçe ortaktır ve backend'de saklanır. Başkalarının
+// değişiklikleri sekmeye dönüldüğünde ve dakikada bir yenilenerek görünür.
+const REFRESH_INTERVAL_MS = 60_000;
 
-export type CalendarNoteCategory = "note" | "task" | "logistics" | "important";
+export type CalendarNoteCategory = CalendarNoteResponse["category"];
 
 export interface CalendarNote {
   id: string;
@@ -20,11 +25,17 @@ export interface CalendarNote {
   done: boolean;
   createdAt: string;
   updatedAt: string;
+  createdByEmail?: string;
+  updatedByEmail?: string;
 }
 
 export type CalendarNoteInput = Pick<
   CalendarNote,
   "dateKey" | "sessionId" | "text" | "time" | "category"
+>;
+
+export type CalendarNoteChanges = Partial<
+  Pick<CalendarNote, "text" | "time" | "category" | "done">
 >;
 
 export const NOTE_CATEGORIES: Record<
@@ -53,58 +64,31 @@ export const NOTE_CATEGORIES: Record<
   },
 };
 
-const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const TIME_PATTERN = /^\d{2}:\d{2}$/;
+const fromResponse = (note: CalendarNoteResponse): CalendarNote => ({
+  id: note.id,
+  dateKey: note.noteDate,
+  sessionId: note.testSessionId || undefined,
+  text: note.text,
+  time: note.noteTime || undefined,
+  category: note.category in NOTE_CATEGORIES ? note.category : "note",
+  done: note.isDone,
+  createdAt: note.createdAt,
+  updatedAt: note.updatedAt,
+  createdByEmail: note.createdByEmail || undefined,
+  updatedByEmail: note.updatedByEmail || undefined,
+});
 
-const isCalendarNote = (value: unknown): value is CalendarNote => {
-  if (!value || typeof value !== "object") return false;
-  const note = value as Partial<CalendarNote>;
-  return (
-    typeof note.id === "string" &&
-    typeof note.dateKey === "string" &&
-    DATE_KEY_PATTERN.test(note.dateKey) &&
-    typeof note.text === "string" &&
-    typeof note.category === "string" &&
-    note.category in NOTE_CATEGORIES &&
-    (note.sessionId === undefined || typeof note.sessionId === "string") &&
-    (note.time === undefined ||
-      (typeof note.time === "string" && TIME_PATTERN.test(note.time)))
-  );
+const toPayload = (changes: CalendarNoteChanges): CalendarNotePayload => {
+  const payload: CalendarNotePayload = {};
+  if (changes.text !== undefined) payload.text = changes.text.trim();
+  if (changes.time !== undefined) payload.noteTime = changes.time || null;
+  if (changes.category !== undefined) payload.category = changes.category;
+  if (changes.done !== undefined) payload.isDone = changes.done;
+  return payload;
 };
 
-const normalizeNotes = (value: unknown): CalendarNote[] => {
-  if (!Array.isArray(value)) return [];
-  return value.filter(isCalendarNote).map((note) => ({
-    ...note,
-    done: Boolean(note.done),
-    createdAt: note.createdAt || new Date().toISOString(),
-    updatedAt: note.updatedAt || note.createdAt || new Date().toISOString(),
-  }));
-};
-
-const readNotes = (): CalendarNote[] => {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? normalizeNotes(JSON.parse(raw)) : [];
-  } catch (error) {
-    console.error("Takvim notları okunamadı:", error);
-    return [];
-  }
-};
-
-const writeNotes = (notes: CalendarNote[]) => {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-  } catch (error) {
-    console.error("Takvim notları kaydedilemedi:", error);
-    alert("Not kaydedilemedi. Tarayıcı depolaması dolu veya kapalı olabilir.");
-  }
-};
-
-const createId = () =>
-  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const getStatus = (error: unknown) =>
+  (error as { response?: { status?: number } })?.response?.status;
 
 export const compareNotes = (first: CalendarNote, second: CalendarNote) => {
   const firstTime = first.time || "99:99";
@@ -115,107 +99,162 @@ export const compareNotes = (first: CalendarNote, second: CalendarNote) => {
 
 export function useCalendarNotes() {
   const [notes, setNotes] = useState<CalendarNote[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const notesRef = useRef<CalendarNote[]>([]);
+  // Yenileme bir değişiklikle yarışırsa ekrandaki güncel hâli ezmesin.
+  const mutationsInFlight = useRef(0);
+  const mutationVersion = useRef(0);
 
-  useEffect(() => {
-    setNotes(readNotes());
-    // Aynı cihazda açık başka sekmedeki değişiklikleri de yansıt.
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === STORAGE_KEY) setNotes(readNotes());
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
-
-  const update = useCallback(
+  const applyNotes = useCallback(
     (updater: (current: CalendarNote[]) => CalendarNote[]) => {
-      const next = updater(readNotes());
-      writeNotes(next);
-      setNotes(next);
+      setNotes((current) => {
+        const next = updater(current);
+        notesRef.current = next;
+        return next;
+      });
     },
     []
   );
 
+  const refresh = useCallback(async () => {
+    const versionAtStart = mutationVersion.current;
+    try {
+      const response = await calendarNoteApi.getAll();
+      if (
+        mutationsInFlight.current > 0 ||
+        versionAtStart !== mutationVersion.current
+      ) {
+        return;
+      }
+      const serverNotes = (response.data?.data || []).map(fromResponse);
+      applyNotes(() => serverNotes);
+      setLoadError(false);
+    } catch (error) {
+      console.error("Takvim notları yüklenemedi:", error);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [applyNotes]);
+
+  useEffect(() => {
+    refresh();
+    const handleFocus = () => refresh();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, REFRESH_INTERVAL_MS);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refresh]);
+
+  const runMutation = useCallback(async <T,>(task: () => Promise<T>) => {
+    mutationsInFlight.current += 1;
+    mutationVersion.current += 1;
+    try {
+      return await task();
+    } finally {
+      mutationsInFlight.current -= 1;
+    }
+  }, []);
+
+  /** Kayıt başarılıysa true döner; form ancak o zaman temizlenir. */
   const addNote = useCallback(
-    (input: CalendarNoteInput) => {
-      const now = new Date().toISOString();
-      update((current) => [
-        ...current,
-        {
-          id: createId(),
-          dateKey: input.dateKey,
-          sessionId: input.sessionId || undefined,
-          text: input.text.trim(),
-          time: input.time || undefined,
-          category: input.category,
-          done: false,
-          createdAt: now,
-          updatedAt: now,
-        },
-      ]);
-    },
-    [update]
+    (input: CalendarNoteInput) =>
+      runMutation(async () => {
+        try {
+          const response = await calendarNoteApi.create({
+            noteDate: input.dateKey,
+            noteTime: input.time || null,
+            testSessionId: input.sessionId || null,
+            text: input.text.trim(),
+            category: input.category,
+          });
+          const saved = fromResponse(response.data.data);
+          applyNotes((current) => [...current, saved]);
+          return true;
+        } catch (error) {
+          console.error("Takvim notu kaydedilemedi:", error);
+          alert("Not kaydedilemedi. Bağlantıyı kontrol edip tekrar deneyin.");
+          return false;
+        }
+      }),
+    [applyNotes, runMutation]
   );
 
+  /** Kayıt başarılıysa true döner; düzenleme formu ancak o zaman kapanır. */
   const updateNote = useCallback(
-    (
-      id: string,
-      changes: Partial<Pick<CalendarNote, "text" | "time" | "category" | "done">>
-    ) => {
-      update((current) =>
-        current.map((note) =>
-          note.id === id
-            ? {
-                ...note,
-                ...changes,
-                text: (changes.text ?? note.text).trim(),
-                time:
-                  changes.time !== undefined
-                    ? changes.time || undefined
-                    : note.time,
-                updatedAt: new Date().toISOString(),
-              }
-            : note
-        )
-      );
-    },
-    [update]
+    (id: string, changes: CalendarNoteChanges) =>
+      runMutation(async () => {
+        const previous = notesRef.current.find((note) => note.id === id);
+        if (!previous) return false;
+
+        applyNotes((current) =>
+          current.map((note) =>
+            note.id === id
+              ? {
+                  ...note,
+                  ...changes,
+                  text: (changes.text ?? note.text).trim(),
+                  time:
+                    changes.time !== undefined ? changes.time || undefined : note.time,
+                }
+              : note
+          )
+        );
+        try {
+          const response = await calendarNoteApi.update(id, toPayload(changes));
+          const saved = fromResponse(response.data.data);
+          applyNotes((current) =>
+            current.map((note) => (note.id === id ? saved : note))
+          );
+          return true;
+        } catch (error) {
+          console.error("Takvim notu güncellenemedi:", error);
+          if (getStatus(error) === 404) {
+            applyNotes((current) => current.filter((note) => note.id !== id));
+            alert("Bu not başka bir ekip üyesi tarafından silinmiş.");
+            return true;
+          }
+          applyNotes((current) =>
+            current.map((note) => (note.id === id ? previous : note))
+          );
+          alert("Not güncellenemedi. Bağlantıyı kontrol edip tekrar deneyin.");
+          return false;
+        }
+      }),
+    [applyNotes, runMutation]
   );
 
   const deleteNote = useCallback(
-    (id: string) => {
-      update((current) => current.filter((note) => note.id !== id));
-    },
-    [update]
+    (id: string) =>
+      runMutation(async () => {
+        const previous = notesRef.current.find((note) => note.id === id);
+        if (!previous) return;
+
+        applyNotes((current) => current.filter((note) => note.id !== id));
+        try {
+          await calendarNoteApi.delete(id);
+        } catch (error) {
+          // Başka biri zaten sildiyse sonuç aynı.
+          if (getStatus(error) === 404) return;
+          console.error("Takvim notu silinemedi:", error);
+          applyNotes((current) =>
+            current.some((note) => note.id === id) ? current : [...current, previous]
+          );
+          alert("Not silinemedi. Bağlantıyı kontrol edip tekrar deneyin.");
+        }
+      }),
+    [applyNotes, runMutation]
   );
 
-  /**
-   * Yedek dosyasındaki notları birleştirir; aynı not varsa güncel olanı tutar.
-   * Eklenen veya güncellenen not sayısını döndürür.
-   */
-  const importNotes = useCallback(
-    (value: unknown): number => {
-      const payload =
-        value && typeof value === "object" && "notes" in value
-          ? (value as { notes: unknown }).notes
-          : value;
-      const incoming = normalizeNotes(payload);
-      if (incoming.length === 0) return 0;
-      let changed = 0;
-      update((current) => {
-        const byId = new Map(current.map((note) => [note.id, note]));
-        incoming.forEach((note) => {
-          const existing = byId.get(note.id);
-          if (!existing || existing.updatedAt < note.updatedAt) {
-            byId.set(note.id, note);
-            changed += 1;
-          }
-        });
-        return [...byId.values()];
-      });
-      return changed;
-    },
-    [update]
-  );
-
-  return { notes, addNote, updateNote, deleteNote, importNotes };
+  return { notes, loading, loadError, refresh, addNote, updateNote, deleteNote };
 }

@@ -316,6 +316,48 @@ export const mvpTestSessionApi = {
   ) => api.post(`/test-sessions/${testSessionId}/x-one/import-qr`, data),
 };
 
+export interface CalendarNoteResponse {
+  id: string;
+  noteDate: string;
+  noteTime: string | null;
+  testSessionId: string | null;
+  text: string;
+  category: "note" | "task" | "logistics" | "important";
+  isDone: boolean;
+  createdByEmail: string | null;
+  updatedByEmail: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CalendarNotePayload {
+  noteDate?: string;
+  noteTime?: string | null;
+  testSessionId?: string | null;
+  text?: string;
+  category?: CalendarNoteResponse["category"];
+  isDone?: boolean;
+}
+
+// Takvim notları ekipçe ortak; backend'de saklanır.
+export const calendarNoteApi = {
+  getAll: () =>
+    api.get<{ success: boolean; data: CalendarNoteResponse[] }>(
+      "/internal/calendar-notes"
+    ),
+  create: (data: CalendarNotePayload) =>
+    api.post<{ success: boolean; data: CalendarNoteResponse }>(
+      "/internal/calendar-notes",
+      data
+    ),
+  update: (id: string, data: CalendarNotePayload) =>
+    api.patch<{ success: boolean; data: CalendarNoteResponse }>(
+      `/internal/calendar-notes/${id}`,
+      data
+    ),
+  delete: (id: string) => api.delete(`/internal/calendar-notes/${id}`),
+};
+
 export const publicRegistrationApi = {
   registerAthlete: (
     testSessionSlug: string,

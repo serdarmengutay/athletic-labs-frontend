@@ -5,6 +5,7 @@ import { Check, Clock, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   CalendarNote,
   CalendarNoteCategory,
+  CalendarNoteChanges,
   NOTE_CATEGORIES,
 } from "@/lib/calendarNotes";
 
@@ -28,9 +29,11 @@ export function NoteComposer({
   autoFocus?: boolean;
   placeholder?: string;
   submitLabel?: string;
-  onSubmit: (draft: NoteDraft) => void;
+  /** false dönerse kayıt başarısız sayılır ve yazılan metin korunur. */
+  onSubmit: (draft: NoteDraft) => boolean | void | Promise<boolean | void>;
   onCancel?: () => void;
 }) {
+  const [saving, setSaving] = useState(false);
   const [text, setText] = useState(initial?.text ?? "");
   const [time, setTime] = useState(initial?.time ?? "");
   const [category, setCategory] = useState<CalendarNoteCategory>(
@@ -39,13 +42,14 @@ export function NoteComposer({
 
   const trimmed = text.trim();
 
-  const submit = () => {
-    if (!trimmed) return;
-    onSubmit({ text: trimmed, time, category });
-    if (!initial) {
-      setText("");
-      setTime("");
-    }
+  const submit = async () => {
+    if (!trimmed || saving) return;
+    setSaving(true);
+    const result = await onSubmit({ text: trimmed, time, category });
+    setSaving(false);
+    if (result === false || initial) return;
+    setText("");
+    setTime("");
   };
 
   return (
@@ -64,7 +68,7 @@ export function NoteComposer({
             event.preventDefault();
             submit();
           }
-          if (event.key === "Escape" && onCancel) onCancel();
+          if (event.key === "Escape" && onCancel && !saving) onCancel();
         }}
         maxLength={MAX_NOTE_LENGTH}
         rows={2}
@@ -105,6 +109,7 @@ export function NoteComposer({
             <button
               type="button"
               onClick={onCancel}
+              disabled={saving}
               className="rounded-xl px-3 py-2 text-xs font-semibold text-[#b8b8bd] transition hover:text-white"
             >
               Vazgeç
@@ -112,11 +117,11 @@ export function NoteComposer({
           )}
           <button
             type="submit"
-            disabled={!trimmed}
+            disabled={!trimmed || saving}
             className="inline-flex items-center gap-1.5 rounded-xl bg-[#e4fc55] px-3 py-2 text-xs font-bold text-[#070e0e] transition hover:bg-white disabled:cursor-not-allowed disabled:bg-[#6f6f73]"
           >
             {initial ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-            {submitLabel}
+            {saving ? "Kaydediliyor..." : submitLabel}
           </button>
         </div>
       </div>
@@ -124,31 +129,40 @@ export function NoteComposer({
   );
 }
 
+const getAuthorLabel = (note: CalendarNote) => {
+  const author = note.createdByEmail?.split("@")[0];
+  if (!author) return undefined;
+  const editor = note.updatedByEmail?.split("@")[0];
+  return editor && editor !== author
+    ? `${author} ekledi · ${editor} düzenledi`
+    : `${author} ekledi`;
+};
+
 export function NoteItem({
   note,
-  hint,
   onUpdate,
   onDelete,
 }: {
   note: CalendarNote;
-  hint?: string;
   onUpdate: (
     id: string,
-    changes: Partial<Pick<CalendarNote, "text" | "time" | "category" | "done">>
-  ) => void;
+    changes: CalendarNoteChanges
+  ) => boolean | void | Promise<boolean | void>;
   onDelete: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const category = NOTE_CATEGORIES[note.category];
+  const authorLabel = getAuthorLabel(note);
 
   if (editing) {
     return (
       <NoteComposer
         initial={{ text: note.text, time: note.time ?? "", category: note.category }}
         submitLabel="Kaydet"
-        onSubmit={(draft) => {
-          onUpdate(note.id, draft);
-          setEditing(false);
+        onSubmit={async (draft) => {
+          const saved = await onUpdate(note.id, draft);
+          if (saved !== false) setEditing(false);
+          return saved;
         }}
         onCancel={() => setEditing(false)}
       />
@@ -187,7 +201,7 @@ export function NoteItem({
               {note.time}
             </span>
           )}
-          {hint && <span className="text-[#8f9996]">{hint}</span>}
+          {authorLabel && <span className="text-[#8f9996]">{authorLabel}</span>}
         </div>
       </div>
       <div className="flex flex-none items-center gap-0.5">
@@ -202,7 +216,9 @@ export function NoteItem({
         <button
           type="button"
           onClick={() => {
-            if (window.confirm("Bu not silinsin mi?")) onDelete(note.id);
+            if (window.confirm("Bu not ekipteki herkes için silinsin mi?")) {
+              onDelete(note.id);
+            }
           }}
           className="rounded-lg p-1.5 text-[#8f9996] transition hover:bg-rose-400/10 hover:text-rose-200"
           aria-label="Notu sil"
@@ -221,7 +237,7 @@ export function AddNoteToggle({
 }: {
   label: string;
   placeholder?: string;
-  onSubmit: (draft: NoteDraft) => void;
+  onSubmit: (draft: NoteDraft) => boolean | void | Promise<boolean | void>;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -242,9 +258,10 @@ export function AddNoteToggle({
     <NoteComposer
       autoFocus
       placeholder={placeholder}
-      onSubmit={(draft) => {
-        onSubmit(draft);
-        setOpen(false);
+      onSubmit={async (draft) => {
+        const saved = await onSubmit(draft);
+        if (saved !== false) setOpen(false);
+        return saved;
       }}
       onCancel={() => setOpen(false)}
     />
