@@ -20,10 +20,12 @@ import {
   ScanLine,
   Edit3,
   FileDown,
+  FileSpreadsheet,
   Lock,
 } from "lucide-react";
 import { mvpTestSessionApi } from "@/lib/api";
 import QRScanner from "@/components/QRScanner";
+import SessionAthleteImportModal from "@/components/SessionAthleteImportModal";
 import dynamic from "next/dynamic";
 
 import {
@@ -152,6 +154,7 @@ export default function TestDataEntryPage() {
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [absentAthleteKeys, setAbsentAthleteKeys] = useState<string[]>([]);
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [showAthleteImportModal, setShowAthleteImportModal] = useState(false);
   const [editingAthlete, setEditingAthlete] = useState<ParsedAthlete | null>(null);
   const [athleteEditForm, setAthleteEditForm] = useState({
     fullName: "",
@@ -1455,14 +1458,25 @@ export default function TestDataEntryPage() {
             <p className="text-slate-400 text-lg mb-4">
               Henüz sporcu verisi yüklenmemiş
             </p>
-            <button
-              onClick={() => setShowQuickAddModal(true)}
-              className="rounded-xl bg-[#e4fc55] px-5 py-3 font-semibold text-[#070e0e] hover:bg-white"
-            >
-              Sporcu Ekle
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => setShowQuickAddModal(true)}
+                className="rounded-xl bg-[#e4fc55] px-5 py-3 font-semibold text-[#070e0e] hover:bg-white"
+              >
+                Sporcu Ekle
+              </button>
+              {testSessionId && (
+                <button
+                  onClick={() => setShowAthleteImportModal(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-[#e4fc55]/50 px-5 py-3 font-semibold text-[#e4fc55] hover:bg-[#e4fc55]/10"
+                >
+                  <FileSpreadsheet className="h-5 w-5" />
+                  Excel ile Yükle
+                </button>
+              )}
+            </div>
             <p className="mt-3 text-sm text-slate-500">
-              Listeyi sahada tek tek ekleyebilir veya ana ekrandan Excel
+              Listeyi sahada tek tek ekleyebilir veya Excel dosyasıyla toplu
               yükleyebilirsiniz.
             </p>
           </div>
@@ -1513,13 +1527,25 @@ export default function TestDataEntryPage() {
                     />
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowQuickAddModal(true)}
-                  className="rounded-lg bg-[#e4fc55] px-4 py-2 text-sm font-semibold text-[#070e0e] hover:bg-white"
-                >
-                  Sporcu Ekle
-                </button>
+                <div className="flex gap-2">
+                  {testSessionId && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAthleteImportModal(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#e4fc55]/50 px-3 py-2 text-sm font-semibold text-[#e4fc55] hover:bg-[#e4fc55]/10"
+                    >
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Excel
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickAddModal(true)}
+                    className="rounded-lg bg-[#e4fc55] px-4 py-2 text-sm font-semibold text-[#070e0e] hover:bg-white"
+                  >
+                    Sporcu Ekle
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -2438,6 +2464,25 @@ export default function TestDataEntryPage() {
             </div>
           </form>
         </div>
+      )}
+
+      {showAthleteImportModal && testSessionId && (
+        <SessionAthleteImportModal
+          session={{
+            id: testSessionId,
+            clubName: testSessionName || "Test oturumu",
+            sportType: testSessionSportType,
+            testDate: testSessionDate || undefined,
+          }}
+          onClose={() => setShowAthleteImportModal(false)}
+          onImported={async () => {
+            try {
+              await refreshAthletesFromBackend(testSessionId);
+            } catch (error) {
+              console.error("Yükleme sonrası sporcu listesi yenilenemedi:", error);
+            }
+          }}
+        />
       )}
 
       <QRScanner

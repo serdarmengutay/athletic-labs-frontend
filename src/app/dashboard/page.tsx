@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Copy,
   Edit3,
+  FileSpreadsheet,
   MapPin,
   Plus,
   Printer,
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import AppShell from "@/components/AppShell";
+import SessionAthleteImportModal from "@/components/SessionAthleteImportModal";
 import { mvpTestSessionApi } from "@/lib/api";
 import { DEFAULT_VALD_SESSION_CONFIG } from "@/lib/valdConfig";
 import { getSportTestConfig, MeasurementKey } from "@/lib/sportTestConfig";
@@ -112,6 +114,9 @@ export default function Dashboard() {
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [importSession, setImportSession] = useState<DashboardSession | null>(
+    null
+  );
 
   const loadSessions = async () => {
     try {
@@ -585,6 +590,14 @@ export default function Dashboard() {
                             <ArrowRight className="h-4 w-4" />
                           </button>
                           <button
+                            onClick={() => setImportSession(session)}
+                            title="Excel ile sporcu listesi yükle"
+                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-white/10 px-3 py-3 text-sm font-semibold text-white transition hover:border-[#e4fc55]/70 hover:bg-[#e4fc55]/10"
+                          >
+                            <FileSpreadsheet className="h-4 w-4" />
+                            Liste Yükle
+                          </button>
+                          <button
                             onClick={() => openEditModal(session)}
                             className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:border-[#e4fc55]/70 hover:bg-[#e4fc55]/10"
                           >
@@ -600,7 +613,7 @@ export default function Dashboard() {
 	                          </button>
 	                          <button
 	                            onClick={() => openDeleteModal(session)}
-	                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/30 px-4 py-3 text-sm font-semibold text-red-200 transition hover:border-red-400/60 hover:bg-red-500/10"
+	                            className="inline-flex items-center justify-center gap-2 rounded-xl border sm:col-span-2 lg:col-span-1 xl:col-span-2 border-red-500/30 px-4 py-3 text-sm font-semibold text-red-200 transition hover:border-red-400/60 hover:bg-red-500/10"
 	                          >
 	                            <Trash2 className="h-4 w-4" />
 	                            Sil
@@ -953,6 +966,13 @@ export default function Dashboard() {
 	          </form>
 	        </div>
 	      )}
-	    </AppShell>
+	      {importSession && (
+        <SessionAthleteImportModal
+          session={importSession}
+          onClose={() => setImportSession(null)}
+          onImported={loadSessions}
+        />
+      )}
+    </AppShell>
 	  );
 	}
