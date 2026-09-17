@@ -11,12 +11,16 @@ import {
   Upload,
   Users,
 } from "lucide-react";
-import * as XLSX from "xlsx";
 import AppShell from "@/components/AppShell";
 import { athleteApi, clubApi, mvpTestSessionApi } from "@/lib/api";
 import { DEFAULT_VALD_SESSION_CONFIG } from "@/lib/valdConfig";
 import { getSportTestConfig, MeasurementKey } from "@/lib/sportTestConfig";
 import { buildSessionMeasurementConfig } from "@/lib/sessionMeasurementConfig";
+import {
+  getSessionGender,
+  normalizeBirthDate,
+  parseAthleteExcel,
+} from "@/lib/athleteExcel";
 
 interface ParsedAthlete {
   fullName: string;
@@ -123,44 +127,16 @@ export default function Home() {
     );
   };
 
-  const extractBirthYear = (birthDate: string): number | undefined => {
-    const parts = birthDate.split(/[./-]/).filter(Boolean);
-    const yearPart = parts.find((part) => part.length === 4) || parts.at(-1);
-    const year = Number.parseInt(String(yearPart || ""), 10);
-    return Number.isFinite(year) && year > 1900 ? year : undefined;
-  };
-
-  const normalizeBirthDate = (birthDate: string): string | undefined => {
-    const parts = birthDate.split(/[./-]/).filter(Boolean);
-    if (parts.length !== 3) return undefined;
-    const [day, month, year] = parts;
-    if (year.length !== 4) return undefined;
-    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-  };
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (readerEvent) => {
-      const workbook = XLSX.read(readerEvent.target?.result, { type: "binary" });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
-      const athletes = rows
-        .slice(1)
-        .filter((row) => row.length >= 2 && row[0])
-        .map((row) => {
-          const birthDate = String(row[1] || "").trim();
-          return {
-            fullName: String(row[0] || "").trim(),
-            birthDate,
-            birthYear: extractBirthYear(birthDate),
-          };
-        });
-      setParsedAthletes(athletes);
-    };
-    reader.readAsBinaryString(file);
+    try {
+      setParsedAthletes(await parseAthleteExcel(file));
+    } catch (error) {
+      console.error("Excel okunamadı:", error);
+      alert("Dosya okunamadı. Excel (.xlsx, .xls) veya CSV seçin.");
+    }
   };
 
   const handleSubmitTestSession = async (event: React.FormEvent) => {
@@ -200,11 +176,7 @@ export default function Home() {
       const sessionId = sessionResponse.data?.data?.id;
       if (!sessionId) throw new Error("Backend session ID döndürmedi.");
 
-      const sessionGender = formData.sportType
-        .toLocaleLowerCase("tr")
-        .includes("kız")
-        ? "female"
-        : "male";
+      const sessionGender = getSessionGender(formData.sportType);
       let athletesWithBackendIds: ParsedAthlete[] = [];
 
       if (parsedAthletes.length > 0) {
@@ -214,7 +186,7 @@ export default function Home() {
             fullName: athlete.fullName,
             birthDate: normalizeBirthDate(athlete.birthDate),
             birthYear: athlete.birthYear,
-            gender: sessionGender as "male" | "female",
+            gender: sessionGender,
           }))
         );
         const importedAthletes = importResponse.data?.data?.athletes || [];
